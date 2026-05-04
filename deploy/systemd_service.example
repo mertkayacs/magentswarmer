@@ -1,0 +1,17 @@
+[Unit]
+Description=magentswarmer -- multi-agent AI swarm
+After=network.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/magentswarmer
+EnvironmentFile=/opt/magentswarmer/.env
+ExecStart=/opt/magentswarmer/.venv/bin/python src/orchestrator.py
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
