@@ -39,6 +39,10 @@ export interface Config {
     last_used_tag: string | null
     last_used_goal: string | null
   }
+  global: {
+    tmux_session_name: string
+    peek_interval_seconds: 3 | 5 | 10
+  }
 }
 
 // ~/.reeves/state.json (version 1)
