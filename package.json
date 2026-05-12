@@ -33,6 +33,7 @@
     "@types/node": "^25.7.0",
     "@types/react": "^19.2.14",
     "eslint": "latest",
+    "ink-testing-library": "^4.0.0",
     "prettier": "latest",
     "tsup": "^8.5.1",
     "typescript": "^6.0.3",
