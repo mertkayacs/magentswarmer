@@ -12,6 +12,8 @@ import { Home } from './screens/Home.js'
 import { Spawn } from './screens/Spawn.js'
 import { Orchestrate } from './screens/Orchestrate.js'
 import { Sessions } from './screens/Sessions.js'
+import { Top } from './screens/Top.js'
+import { History } from './screens/History.js'
 import { Settings } from './screens/Settings.js'
 import { Doctor } from './screens/Doctor.js'
 import { Help } from './screens/Help.js'
@@ -35,6 +37,8 @@ function renderScreen(screen: ScreenName) {
     case 'Spawn': return <Spawn />
     case 'Orchestrate': return <Orchestrate />
     case 'Sessions': return <Sessions />
+    case 'Top': return <Top />
+    case 'History': return <History />
     case 'Settings': return <Settings />
     case 'Doctor': return <Doctor />
     case 'Help': return <Help />
