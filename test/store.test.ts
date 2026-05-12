@@ -74,7 +74,7 @@ describe('store', () => {
 
   it('addPreset and removePreset', async () => {
     const { addPreset, removePreset, loadState } = await import('../src/state/store.js')
-    addPreset('mypreset', 'build a feature', [{ name: 'agent-1', prompt: 'do the thing' }])
+    addPreset('mypreset', 'build a feature', [{ name: 'agent-1', prompt: 'do the thing' }], { provider: 'cc', auth: 'subscription', model: null, permissions: 'skip', effort: 'high' })
     expect(loadState().presets.length).toBe(1)
     removePreset('mypreset')
     expect(loadState().presets.length).toBe(0)
@@ -82,8 +82,8 @@ describe('store', () => {
 
   it('addPreset upserts by name', async () => {
     const { addPreset, loadState } = await import('../src/state/store.js')
-    addPreset('p1', 'goal1', [])
-    addPreset('p1', 'goal2', [])
+    addPreset('p1', 'goal1', [], { provider: 'cc', auth: 'subscription', model: null, permissions: 'skip', effort: 'high' })
+    addPreset('p1', 'goal2', [], { provider: 'gemini', auth: 'api-key', model: null, permissions: 'ask', effort: 'low' })
     expect(loadState().presets.length).toBe(1)
     expect(loadState().presets[0]?.goal).toBe('goal2')
   })
