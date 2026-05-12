@@ -6,6 +6,7 @@ import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
+import { CommandPicker } from '../components/CommandPicker.js'
 import { StatusBar } from '../components/StatusBar.js'
 import { FieldHint } from '../components/FieldHint.js'
 import { orchestrate } from '../launcher/orchestrate.js'
@@ -58,7 +59,7 @@ export function Orchestrate() {
   }
 
   const fieldFocused = editing && isTextField(focusIdx)
-  const { cmdMode, cmdValue, cmdError } = useScreenNav(push, pop, fieldFocused)
+  const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = useScreenNav(push, pop, fieldFocused)
 
   function workerIdx(fieldIdx: number): number {
     return Math.floor((fieldIdx - headerCount()) / 2)
@@ -201,6 +202,7 @@ export function Orchestrate() {
           <Text color="gray" dimColor>press l to view sessions, esc to go back</Text>
         </Box>
         <Box flexDirection="column" marginTop={1}>
+          <CommandPicker completions={completions} selectedIdx={selectedIdx} />
           <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
             <Text color="gray">/ </Text>
             <Text>{cmdMode ? cmdValue : ''}</Text>
@@ -252,6 +254,7 @@ export function Orchestrate() {
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
+        <CommandPicker completions={completions} selectedIdx={selectedIdx} />
         {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
         <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
           <Text color="gray">/ </Text>

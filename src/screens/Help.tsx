@@ -6,11 +6,12 @@ import React from 'react'
 import { Box, Text } from 'ink'
 import { useRouter } from '../router.js'
 import { useScreenNav, SLASH_ROUTES } from '../hooks/useScreenNav.js'
+import { CommandPicker } from '../components/CommandPicker.js'
 import { StatusBar } from '../components/StatusBar.js'
 
 export function Help() {
   const { push, pop } = useRouter()
-  const { cmdMode, cmdValue, cmdError } = useScreenNav(push, pop)
+  const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = useScreenNav(push, pop)
 
   return (
     <Box flexDirection="column" paddingX={1}>
@@ -48,6 +49,7 @@ export function Help() {
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
+        <CommandPicker completions={completions} selectedIdx={selectedIdx} />
         {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
         <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
           <Text color="gray">/ </Text>
