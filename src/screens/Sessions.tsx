@@ -59,6 +59,7 @@ export function Sessions() {
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [peekContent, setPeekContent] = useState<string | null>(null)
   const [attachHint, setAttachHint] = useState('')
+  const [copyStatus, setCopyStatus] = useState(false)
 
   const refresh = useCallback(() => {
     const all = listSessions()
@@ -130,6 +131,12 @@ export function Sessions() {
       refresh()
       return
     }
+    if (input === 'c' && selected?.rc_url) {
+      process.stdout.write('\x1b]52;c;' + Buffer.from(selected.rc_url).toString('base64') + '\x07')
+      setCopyStatus(true)
+      setTimeout(() => setCopyStatus(false), 2000)
+      return
+    }
   }, { isActive: !cmdMode })
 
   const dashLen = Math.max(0, (columns ?? 80) - 14)
@@ -140,7 +147,7 @@ export function Sessions() {
       <Box marginBottom={1}>
         <Text color="#5a96e0" bold>REEVES AGENTS</Text>
         <Text color="#4a6fa5">  /sessions</Text>
-        <Text color="gray" dimColor>  {sessions.length} active  ↑↓ select  enter peek  a attach  k kill  r refresh</Text>
+        <Text color="gray" dimColor>  {sessions.length} active  ↑↓ select  enter peek  a attach  k kill  r refresh  c copy</Text>
       </Box>
 
       {/* Zone 2 */}
@@ -193,6 +200,14 @@ export function Sessions() {
             {peekContent.split('\n').map((line, i) => (
               <Text key={i} wrap="truncate">{line || ' '}</Text>
             ))}
+            {selected?.rc_url && (
+              <Box flexDirection="column" marginTop={1}>
+                <Text color="gray" dimColor>remote control</Text>
+                <Text color="green">{selected.rc_url}</Text>
+                <Text color="gray" dimColor>c to copy</Text>
+                {copyStatus && <Text color="green">copied</Text>}
+              </Box>
+            )}
           </Box>
         )}
       </Box>

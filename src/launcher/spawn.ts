@@ -4,12 +4,12 @@
 // Invariant: every session has a unique id and corresponding tmux window.
 
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { SpawnRequest, Session } from '../state/types.js'
 import { buildEnv, buildCommand, detectAvailable } from './providers.js'
-import { registryDir, newId, write as writeSession, nowIso } from '../state/registry.js'
+import { registryDir, newId, write as writeSession, nowIso, updateSession } from '../state/registry.js'
 import { setLastSpawn, addRecentSession } from '../state/store.js'
 
 export const TMUX_SESSION = 'reevesagents'
@@ -130,6 +130,37 @@ export function spawn(req: SpawnRequest): Session {
         // Window may have closed before the delay elapsed
       }
     }, INITIAL_PROMPT_DELAY_MS)
+  }
+
+  // Poll for remote control URL when remote_control=true
+  if (req.remote_control) {
+    const logFile = `/tmp/reeves-${sessionId}.rc.log`
+    try {
+      execFileSync('tmux', ['pipe-pane', '-t', `${TMUX_SESSION}:${windowName}`, '-o', `cat >> ${logFile}`], {
+        stdio: 'ignore',
+      })
+    } catch {
+      // pipe-pane may fail on some systems
+    }
+
+    let pollCount = 0
+    const pollInterval = setInterval(() => {
+      pollCount++
+      if (pollCount > 15) {
+        clearInterval(pollInterval)
+        return
+      }
+      try {
+        const logContent = readFileSync(logFile, 'utf-8')
+        const match = logContent.match(/https:\/\/claude\.ai\/code\/session\/[A-Za-z0-9_-]+/)
+        if (match) {
+          updateSession(sessionId, { rc_url: match[0] })
+          clearInterval(pollInterval)
+        }
+      } catch {
+        // log file may not exist yet
+      }
+    }, 2000)
   }
 
   const now = nowIso()
