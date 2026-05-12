@@ -9,8 +9,6 @@ import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
 import { CommandPicker } from '../components/CommandPicker.js'
 import { detectAvailable } from '../launcher/providers.js'
-import { listAll } from '../state/registry.js'
-import { loadState } from '../state/store.js'
 import { gradientChars, REEVES_ART, AGENTS_ART, GRADIENT_STOPS } from '../brand/banner.js'
 
 let splashShown = false
@@ -30,13 +28,6 @@ export function Welcome() {
     if (!anyAvailable) {
       splashShown = true
       push('Settings')
-      return
-    }
-
-    const state = loadState()
-    if (state.history.spawned_total > 0 || listAll().length > 0) {
-      splashShown = true
-      push('Home')
       return
     }
 
