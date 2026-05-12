@@ -21,9 +21,9 @@ const AUTHS: Auth[] = ['subscription', 'api-key', 'custom']
 const EFFORTS: Array<Effort | null> = [null, 'low', 'medium', 'high']
 const PERMS: Permissions[] = ['ask', 'skip']
 
-// Field indices: 0=working_dir, 1=provider, 2=auth, 3=task, 4=effort, 5=permissions, 6=model, 7=tag, 8=submit
-const TOTAL_FIELDS = 9
-const TEXT_FIELDS = [0, 3, 6, 7]
+// Field indices: 0=working_dir, 1=provider, 2=auth, 3=task, 4=effort, 5=permissions, 6=model, 7=tag, 8=name, 9=submit
+const TOTAL_FIELDS = 10
+const TEXT_FIELDS = [0, 3, 6, 7, 8]
 
 function cycle<T>(arr: T[], current: T, dir: 1 | -1): T {
   const idx = arr.indexOf(current)
@@ -43,7 +43,8 @@ const FIELD_HELP: Record<number, { label: string; text: string }> = {
   5: { label: 'permissions', text: 'skip = agent acts without asking  ask = agent asks before each tool call' },
   6: { label: 'model', text: 'leave blank for provider default  e.g. opus, sonnet-4, gemini-2.0-flash' },
   7: { label: 'tag', text: 'optional label for grouping sessions  e.g. feature-auth, bugfix-race' },
-  8: { label: 'launch', text: 'press enter to spawn the agent in a new tmux window' },
+  8: { label: 'name', text: 'optional session name override  alphanumeric, dash, underscore  max 30 chars' },
+  9: { label: 'launch', text: 'press enter to spawn the agent in a new tmux window' },
 }
 
 export function Spawn() {
@@ -70,6 +71,8 @@ export function Spawn() {
   const [permissions, setPermissions] = useState<Permissions>(ls.permissions)
   const [model, setModel] = useState(ls.model ?? '')
   const [tag, setTag] = useState(ls.tag ?? '')
+  const [name, setName] = useState(ls.name ?? '')
+  const [nameError, setNameError] = useState('')
 
   useEffect(() => {
     if (result && !result.rc_url) {
@@ -97,6 +100,7 @@ export function Spawn() {
     if (focusIdx === 3) return (fn: (_v: string) => string) => setTask(fn)
     if (focusIdx === 6) return (fn: (_v: string) => string) => setModel(fn)
     if (focusIdx === 7) return (fn: (_v: string) => string) => setTag(fn)
+    if (focusIdx === 8) return (fn: (_v: string) => string) => setName(fn)
     return null
   }, [focusIdx])
 
@@ -147,11 +151,29 @@ export function Spawn() {
       return
     }
     if (key.backspace || key.delete) {
-      currentFieldSetter(v => v.slice(0, -1))
+      if (focusIdx === 8) {
+        setName(v => v.slice(0, -1))
+        setNameError('')
+      } else {
+        currentFieldSetter(v => v.slice(0, -1))
+      }
       return
     }
     if (!key.ctrl && !key.meta) {
-      currentFieldSetter(v => v + input)
+      if (focusIdx === 8) {
+        // name field — validate on each keystroke
+        const next = name + input
+        if (next.length > 30) {
+          setNameError('max 30 chars')
+        } else if (!/^[A-Za-z0-9_-]*$/.test(next)) {
+          setNameError('alphanumeric, dash, underscore only')
+        } else {
+          setName(next)
+          setNameError('')
+        }
+      } else {
+        currentFieldSetter(v => v + input)
+      }
     }
   }, { isActive: fieldFocused })
 
@@ -191,6 +213,7 @@ export function Spawn() {
             tag: tag || undefined,
             start_prompt: task,
             working_dir: workingDir || undefined,
+            name: name || undefined,
           })
           setResult(session)
           setSpawning(false)
@@ -336,6 +359,8 @@ export function Spawn() {
               {selectRow(5, 'permissions', PERMS, permissions)}
               {textRow(6, 'model', model, '(optional) leave blank for default')}
               {textRow(7, 'tag', tag, '(optional) e.g. feature-branch')}
+              {textRow(8, 'name', name, '(optional) override session name')}
+              {nameError && <Box paddingLeft={2}><Text color="red" dimColor>{nameError}</Text></Box>}
             </Box>
           )}
 
