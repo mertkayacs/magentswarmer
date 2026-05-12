@@ -48,6 +48,7 @@ program
         start_prompt: opts.task,
       })
       console.log(JSON.stringify(session, null, 2))
+      console.log(`# attach: tmux attach -t ${session.tmux_session}:${session.tmux_window}`)
     } catch (err) {
       console.error(err instanceof Error ? err.message : String(err))
       process.exit(1)
