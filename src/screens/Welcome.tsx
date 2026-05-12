@@ -1,72 +1,100 @@
-// First-run onboarding screen. Detects available providers and saves default config.
-// Inputs: push from router. Outputs: Banner + provider status + setup prompt.
-// Invariant: only shown when no config file exists; always saves config before pushing Home.
+// Welcome splash. Diagonal-gradient ASCII art, auto-advances to Home after 5s.
+// Inputs: push from router. Detects first-run (no providers on PATH → Settings).
+// Invariant: timer cleared on unmount; splashShown prevents re-showing on revisit.
 
-import React, { useState, useEffect } from 'react'
+import React, { useEffect, useMemo } from 'react'
 import { Box, Text, useInput } from 'ink'
+import chalk from 'chalk'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
 import { CommandPicker } from '../components/CommandPicker.js'
-import { StatusBar } from '../components/StatusBar.js'
-import { Banner } from '../components/Banner.js'
-import { usePanes } from '../hooks/usePanes.js'
 import { detectAvailable } from '../launcher/providers.js'
-import { defaultConfig, saveConfig } from '../state/config.js'
-import type { Provider } from '../state/types.js'
+import { listAll } from '../state/registry.js'
+import { loadState } from '../state/store.js'
+import { gradientChars, REEVES_ART, AGENTS_ART, GRADIENT_STOPS } from '../brand/banner.js'
+
+let splashShown = false
 
 export function Welcome() {
   const { push } = useRouter()
-  const panes = usePanes()
   const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = useScreenNav(push, () => {})
-  const [providers, setProviders] = useState<Record<Provider, boolean> | null>(null)
 
   useEffect(() => {
-    setProviders(detectAvailable())
+    if (splashShown) {
+      push('Home')
+      return
+    }
+
+    const available = detectAvailable()
+    const anyAvailable = Object.values(available).some(Boolean)
+    if (!anyAvailable) {
+      splashShown = true
+      push('Settings')
+      return
+    }
+
+    const state = loadState()
+    if (state.history.spawned_total > 0 || listAll().length > 0) {
+      splashShown = true
+      push('Home')
+      return
+    }
+
+    const timer = setTimeout(() => {
+      splashShown = true
+      push('Home')
+    }, 5000)
+
+    return () => clearTimeout(timer)
+  }, [push])
+
+  useInput(() => {
+    splashShown = true
+    push('Home')
+  }, { isActive: !cmdMode })
+
+  const reevesLines = useMemo(() => {
+    return gradientChars(REEVES_ART, GRADIENT_STOPS, 'diagonal').map(line =>
+      line.map(({ char, color }) => chalk.bold(chalk.hex(color)(char))).join('')
+    )
   }, [])
 
-  useInput((_, key) => {
-    if (cmdMode) return
-    if (key.return && providers !== null) {
-      saveConfig(defaultConfig())
-      push('Home')
-    }
-  }, { isActive: !cmdMode })
+  const agentsLines = useMemo(() => {
+    return gradientChars(AGENTS_ART, GRADIENT_STOPS, 'diagonal').map(line =>
+      line.map(({ char, color }) => chalk.bold(chalk.hex(color)(char))).join('')
+    )
+  }, [])
 
   return (
     <Box flexDirection="column" paddingX={1}>
-      <Banner compact={panes === 1} />
-
-      <Box marginTop={1} marginBottom={1}>
-        <Text color="#7eb8f5">no config found. press enter to use defaults, or /settings to customize.</Text>
-      </Box>
-
-      <Box flexDirection="column" marginBottom={1}>
-        <Text color="gray" dimColor>DETECTED PROVIDERS</Text>
-        {providers === null && <Text color="gray" dimColor>  detecting...</Text>}
-        {providers !== null && (['cc', 'codex', 'gemini'] as Provider[]).map(p => (
-          <Box key={p}>
-            <Text color={providers[p] ? 'green' : 'gray'}>{providers[p] ? '✓' : '○'}</Text>
-            <Text>  {p.padEnd(8)}</Text>
-            <Text color="gray" dimColor>{providers[p] ? 'found on PATH' : 'not found — install to use'}</Text>
+      <Box flexGrow={1} flexDirection="column" justifyContent="center">
+        <Box flexDirection="column" alignItems="center">
+          {reevesLines.map((line, i) => (
+            <Box key={`r${i}`} justifyContent="center">
+              <Text>{line}</Text>
+            </Box>
+          ))}
+          {agentsLines.map((line, i) => (
+            <Box key={`a${i}`} justifyContent="center">
+              <Text>{line}</Text>
+            </Box>
+          ))}
+          <Box marginTop={1} justifyContent="center">
+            <Text color="#6e7681" dimColor>spawn  ·  watch  ·  jump</Text>
           </Box>
-        ))}
-      </Box>
+        </Box>
 
-      <Box marginBottom={1}>
-        <Text color="gray" dimColor>defaults: auth=subscription, permissions=skip, effort=high</Text>
-      </Box>
-
-      <Box flexDirection="column" marginTop={1}>
         <CommandPicker completions={completions} selectedIdx={selectedIdx} />
+      </Box>
+
+      <Box flexDirection="column">
         {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
         <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
           <Text color="gray">/ </Text>
           <Text>{cmdMode ? cmdValue : ''}</Text>
-          {!cmdMode && <Text color="gray" dimColor>enter to continue, /settings to customize</Text>}
+          {!cmdMode && <Text color="#6e7681" dimColor>any key to skip</Text>}
         </Box>
       </Box>
-
-      <StatusBar screen="welcome" />
     </Box>
   )
 }
