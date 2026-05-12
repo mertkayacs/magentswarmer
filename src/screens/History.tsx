@@ -1,6 +1,6 @@
 // Session history. Shows ended sessions sorted by end time, grouped by working_dir.
 // Inputs: registry (ended_at set). Outputs: history list with duration column.
-// Invariant: only sessions with ended_at !== null appear; wipe-all requires 'y' confirm.
+// Invariant: only sessions with ended_at !== null appear; wipe-all requires y confirm.
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { Box, Text, useInput, useWindowSize } from 'ink'
@@ -8,7 +8,7 @@ import { homedir } from 'node:os'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
 import { usePanes } from '../hooks/usePanes.js'
-import { CommandPicker } from '../components/CommandPicker.js'
+import { ScreenLayout } from '../components/ScreenLayout.js'
 import { listAll, remove as removeSession } from '../state/registry.js'
 import { providerColor, formatDuration } from '../utils/display.js'
 import type { Session } from '../state/types.js'
@@ -33,7 +33,8 @@ export function History() {
   const { push, pop } = useRouter()
   const panes = usePanes()
   const { columns } = useWindowSize()
-  const { cmdMode, cmdValue, cmdError, completions, selectedIdx: cmdPickerIdx } = useScreenNav(push, pop)
+  const nav = useScreenNav(push, pop)
+  const { cmdMode } = nav
   const [sessions, setSessions] = useState<Session[]>([])
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [wipePending, setWipePending] = useState(false)
@@ -51,6 +52,7 @@ export function History() {
   const groups = groupByDir(sessions)
   const flat = flatSessions(groups)
   const selected = flat[selectedIdx] ?? null
+  const dashLen = Math.max(0, (columns ?? 80) - 14)
 
   useInput((input, key) => {
     if (cmdMode) return
@@ -66,83 +68,28 @@ export function History() {
       return
     }
 
-    if (key.upArrow) {
-      setSelectedIdx(i => Math.max(0, i - 1))
-      return
-    }
-    if (key.downArrow) {
-      setSelectedIdx(i => Math.min(flat.length - 1, i + 1))
-      return
-    }
-    if (input === 'd' && selected) {
-      removeSession(selected.id)
-      load()
-      return
-    }
-    if (input === 'D') {
-      if (sessions.length > 0) setWipePending(true)
-      return
-    }
-    if (input === 'r') {
-      load()
-      return
-    }
+    if (key.upArrow) { setSelectedIdx(i => Math.max(0, i - 1)); return }
+    if (key.downArrow) { setSelectedIdx(i => Math.min(flat.length - 1, i + 1)); return }
+    if (input === 'x' && selected) { removeSession(selected.id); load(); return }
+    if (input === 'X') { if (sessions.length > 0) setWipePending(true); return }
+    if (input === 'r') { load(); return }
   }, { isActive: !cmdMode })
 
-  const dashLen = Math.max(0, (columns ?? 80) - 14)
-
   return (
-    <Box flexDirection="column" paddingX={1}>
-      {/* Zone 1 */}
-      <Box marginBottom={1}>
-        <Text color="#5a96e0" bold>REEVES AGENTS</Text>
-        <Text color="#4a6fa5">  /history</Text>
-        <Text color="gray" dimColor>  {sessions.length} ended  ↑↓ select  d delete  D wipe all  r refresh</Text>
-      </Box>
-
-      {/* Zone 2 */}
-      <Box flexGrow={1} flexDirection={panes >= 2 ? 'row' : 'column'}>
-        <Box flexDirection="column" flexGrow={1}>
-          {sessions.length === 0 ? (
-            <Text color="gray" dimColor>no history — sessions appear here after they end</Text>
-          ) : (
-            groups.map(([dir, groupSessions]) => (
-              <Box key={dir} flexDirection="column" marginBottom={0}>
-                <Text color="#4a6fa5">{'── ' + dir + ' ' + '─'.repeat(Math.max(0, dashLen - dir.length - 1))}</Text>
-                {groupSessions.map(s => {
-                  const flatIdx = flat.indexOf(s)
-                  const isSelected = flatIdx === selectedIdx
-                  const duration = formatDuration(s.created_at, s.ended_at!)
-                  const endedDate = new Date(s.ended_at!).toLocaleString('en-US', {
-                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
-                  })
-                  return (
-                    <Box key={s.id} paddingLeft={isSelected ? 0 : 2}>
-                      {isSelected && <Text color="#5a96e0" bold>{'> '}</Text>}
-                      <Text color={isSelected ? '#7eb8f5' : '#30363d'} bold={isSelected}>{s.id}</Text>
-                      <Text color={providerColor(s.provider)}>  {s.provider.padEnd(6)}</Text>
-                      <Text color={isSelected ? 'white' : 'gray'}>  {(s.tag ?? s.name).slice(0, 20).padEnd(20)}</Text>
-                      <Text color="#6e7681" dimColor>  {duration.padEnd(8)}</Text>
-                      <Text color="#21262d" dimColor>  {endedDate}</Text>
-                    </Box>
-                  )
-                })}
-              </Box>
-            ))
-          )}
-
-          {wipePending && (
-            <Box marginTop={1} borderStyle="round" borderColor="red" paddingLeft={1} paddingRight={1}>
-              <Text color="red">wipe all {sessions.length} history entries? </Text>
-              <Text color="white" bold>y</Text>
-              <Text color="gray">/any other key to cancel</Text>
-            </Box>
-          )}
-
-          <CommandPicker completions={completions} selectedIdx={cmdPickerIdx} />
+    <ScreenLayout
+      screen="History"
+      panes={panes}
+      nav={nav}
+      hint="↑↓ select  x delete  X wipe all  r refresh"
+      header={
+        <Box>
+          <Text color="#5a96e0" bold>REEVES AGENTS</Text>
+          <Text color="#4a6fa5">  /history</Text>
+          <Text color="gray" dimColor>  {sessions.length} ended</Text>
         </Box>
-
-        {panes >= 2 && selected && (
+      }
+      rightPanel={
+        panes >= 2 && selected ? (
           <Box
             flexDirection="column"
             width={40}
@@ -160,18 +107,44 @@ export function History() {
               </Box>
             ))}
           </Box>
-        )}
-      </Box>
+        ) : undefined
+      }
+    >
+      {sessions.length === 0 ? (
+        <Text color="gray" dimColor>no history — sessions appear here after they end</Text>
+      ) : (
+        groups.map(([dir, groupSessions]) => (
+          <Box key={dir} flexDirection="column" marginBottom={0}>
+            <Text color="#4a6fa5">{'── ' + dir + ' ' + '─'.repeat(Math.max(0, dashLen - dir.length - 1))}</Text>
+            {groupSessions.map(s => {
+              const flatIdx = flat.indexOf(s)
+              const isSelected = flatIdx === selectedIdx
+              const duration = formatDuration(s.created_at, s.ended_at!)
+              const endedDate = new Date(s.ended_at!).toLocaleString('en-US', {
+                month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false,
+              })
+              return (
+                <Box key={s.id} paddingLeft={isSelected ? 0 : 2}>
+                  {isSelected && <Text color="#5a96e0" bold>{'> '}</Text>}
+                  <Text color={isSelected ? '#7eb8f5' : '#30363d'} bold={isSelected}>{s.id}</Text>
+                  <Text color={providerColor(s.provider)}>  {s.provider.padEnd(6)}</Text>
+                  <Text color={isSelected ? 'white' : 'gray'}>  {(s.tag ?? s.name).slice(0, 20).padEnd(20)}</Text>
+                  <Text color="#6e7681" dimColor>  {duration.padEnd(8)}</Text>
+                  <Text color="#21262d" dimColor>  {endedDate}</Text>
+                </Box>
+              )
+            })}
+          </Box>
+        ))
+      )}
 
-      {/* Zone 3 */}
-      <Box flexDirection="column">
-        {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
-        <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
-          <Text color="gray">/ </Text>
-          <Text>{cmdMode ? cmdValue : ''}</Text>
-          {!cmdMode && <Text color="gray" dimColor>type a command</Text>}
+      {wipePending && (
+        <Box marginTop={1} borderStyle="round" borderColor="red" paddingLeft={1} paddingRight={1}>
+          <Text color="red">wipe all {sessions.length} history entries? </Text>
+          <Text color="white" bold>y</Text>
+          <Text color="gray">/any other key to cancel</Text>
         </Box>
-      </Box>
-    </Box>
+      )}
+    </ScreenLayout>
   )
 }

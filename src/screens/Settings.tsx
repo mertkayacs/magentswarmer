@@ -1,14 +1,14 @@
 // Configure providers and global settings.
 // Per-provider sections (auth/key/url/model/effort/perms) + global (tmux name, peek interval).
 // Inputs: loadConfig on mount. Outputs: saves on submit.
-// Invariant: section switch with left/right arrow at save button, field edit with enter/arrow in fields.
+// Invariant: section switch with left/right arrow at save button; field edit with enter in fields.
 
 import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
 import { usePanes } from '../hooks/usePanes.js'
-import { CommandPicker } from '../components/CommandPicker.js'
+import { ScreenLayout } from '../components/ScreenLayout.js'
 import { loadConfig, saveConfig } from '../state/config.js'
 import type { Auth, Provider, Effort, Permissions } from '../state/types.js'
 
@@ -48,7 +48,7 @@ export function Settings() {
 
   const isGlobal = section === 'global'
   const fields = isGlobal ? GLOBAL_FIELDS : PROVIDER_FIELDS
-  const totalFields = fields.length + 1 // +1 for save button
+  const totalFields = fields.length + 1
 
   const isTextProvider = (f: ProviderField) => f === 'key_env' || f === 'base_url' || f === 'default_model'
   const isTextGlobal = (f: GlobalField) => f === 'tmux_session_name'
@@ -57,7 +57,8 @@ export function Settings() {
     : isTextProvider(fields[focusField] as ProviderField)
   const fieldFocused = editing && isTextField
 
-  const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = useScreenNav(push, pop, fieldFocused)
+  const nav = useScreenNav(push, pop, fieldFocused)
+  const { cmdMode } = nav
 
   function providerFieldVisible(f: ProviderField): boolean {
     if (section === 'global') return false
@@ -107,18 +108,11 @@ export function Settings() {
       return
     }
 
-    if (key.tab || key.downArrow) {
-      setFocusField(i => Math.min(totalFields - 1, i + 1))
-      return
-    }
-    if (key.upArrow) {
-      setFocusField(i => Math.max(0, i - 1))
-      return
-    }
+    if (key.tab || key.downArrow) { setFocusField(i => Math.min(totalFields - 1, i + 1)); return }
+    if (key.upArrow) { setFocusField(i => Math.max(0, i - 1)); return }
     if (key.leftArrow || key.rightArrow) {
       const dir = key.leftArrow ? -1 : 1 as 1 | -1
       if (focusField === totalFields - 1) {
-        // on save button — switch sections
         setSection(s => cycle(SECTIONS, s, dir))
         setFocusField(0)
         return
@@ -149,7 +143,6 @@ export function Settings() {
         return
       }
       if (isTextField) { setEditing(true) }
-      return
     }
   }, { isActive: !cmdMode })
 
@@ -181,70 +174,28 @@ export function Settings() {
   }
 
   return (
-    <Box flexDirection="column" paddingX={1}>
-      <Box marginBottom={1}>
-        <Text color="#5a96e0" bold>REEVES AGENTS</Text>
-        <Text color="#4a6fa5">  /settings</Text>
-        <Text color="gray" dimColor>  tab/↑↓ navigate  ← → select  enter edit</Text>
-      </Box>
-
-      <Box flexGrow={1} flexDirection={panes >= 2 ? 'row' : 'column'}>
-        <Box flexDirection="column" flexGrow={1}>
-          <Box marginBottom={1}>
-            {SECTIONS.map((s, i) => (
-              <React.Fragment key={s}>
-                {i > 0 && <Text color="gray">  </Text>}
-                <Text
-                  color={section === s ? '#5a96e0' : 'gray'}
-                  bold={section === s}
-                  underline={section === s}
-                >
-                  {s}
-                </Text>
-              </React.Fragment>
-            ))}
-          </Box>
-
-          {!isGlobal && pc && (
-            <Box flexDirection="column">
-              {PROVIDER_FIELDS.map((f, i) => renderProviderField(f, i))}
-            </Box>
-          )}
-
-          {isGlobal && (
-            <Box flexDirection="column">
-              <Box>
-                <Text color={focusField === 0 ? '#5a96e0' : 'gray'} bold={focusField === 0}>
-                  {(focusField === 0 ? '> ' : '  ') + 'tmux session   '}
-                </Text>
-                {editing && focusField === 0 ? (
-                  <Text>{config.global.tmux_session_name}<Text color="#5a96e0">█</Text></Text>
-                ) : (
-                  <Text color="white">{config.global.tmux_session_name}</Text>
-                )}
-              </Box>
-              <Box>
-                <Text color={focusField === 1 ? '#5a96e0' : 'gray'} bold={focusField === 1}>
-                  {(focusField === 1 ? '> ' : '  ') + 'peek interval  '}
-                </Text>
-                <Text color="white">{config.global.peek_interval_seconds}s</Text>
-                {focusField === 1 && <Text color="gray" dimColor>  ← →</Text>}
-              </Box>
-            </Box>
-          )}
-
-          <Box marginTop={1}>
-            <Text color={focusField === totalFields - 1 ? '#5a96e0' : 'gray'} bold={focusField === totalFields - 1}>
-              {(focusField === totalFields - 1 ? '> ' : '  ') + '[ SAVE ]'}
-            </Text>
-          </Box>
-
-          {saveMsg !== '' && <Text color="green">{saveMsg}</Text>}
-          <CommandPicker completions={completions} selectedIdx={selectedIdx} />
+    <ScreenLayout
+      screen="Settings"
+      panes={panes}
+      nav={nav}
+      hint="tab/↑↓ navigate  ← → select  enter edit  ← → at save: switch section"
+      header={
+        <Box>
+          <Text color="#5a96e0" bold>REEVES AGENTS</Text>
+          <Text color="#4a6fa5">  /settings</Text>
         </Box>
-
-        {panes >= 2 && (
-          <Box flexDirection="column" width={36} marginLeft={2} borderStyle="round" borderColor="#1e2d3e" paddingLeft={1} paddingRight={1}>
+      }
+      rightPanel={
+        panes >= 2 ? (
+          <Box
+            flexDirection="column"
+            width={36}
+            marginLeft={2}
+            borderStyle="round"
+            borderColor="#1e2d3e"
+            paddingLeft={1}
+            paddingRight={1}
+          >
             <Text color="#4a6fa5">── CURRENT {'─'.repeat(20)}</Text>
             {!isGlobal && pc && PROVIDER_FIELDS.map(f => {
               if (!providerFieldVisible(f)) return null
@@ -275,17 +226,54 @@ export function Settings() {
               </>
             )}
           </Box>
-        )}
+        ) : undefined
+      }
+    >
+      <Box marginBottom={1}>
+        {SECTIONS.map((s, i) => (
+          <React.Fragment key={s}>
+            {i > 0 && <Text color="gray">  </Text>}
+            <Text color={section === s ? '#5a96e0' : 'gray'} bold={section === s} underline={section === s}>{s}</Text>
+          </React.Fragment>
+        ))}
       </Box>
 
-      <Box flexDirection="column">
-        {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
-        <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
-          <Text color="gray">/ </Text>
-          <Text>{cmdMode ? cmdValue : ''}</Text>
-          {!cmdMode && <Text color="gray" dimColor>type a command</Text>}
+      {!isGlobal && pc && (
+        <Box flexDirection="column">
+          {PROVIDER_FIELDS.map((f, i) => renderProviderField(f, i))}
         </Box>
+      )}
+
+      {isGlobal && (
+        <Box flexDirection="column">
+          <Box>
+            <Text color={focusField === 0 ? '#5a96e0' : 'gray'} bold={focusField === 0}>
+              {(focusField === 0 ? '> ' : '  ') + 'tmux session   '}
+            </Text>
+            {editing && focusField === 0 ? (
+              <Text>{config.global.tmux_session_name}<Text color="#5a96e0">█</Text></Text>
+            ) : (
+              <Text color="white">{config.global.tmux_session_name}</Text>
+            )}
+          </Box>
+          <Box>
+            <Text color={focusField === 1 ? '#5a96e0' : 'gray'} bold={focusField === 1}>
+              {(focusField === 1 ? '> ' : '  ') + 'peek interval  '}
+            </Text>
+            <Text color="white">{config.global.peek_interval_seconds}s</Text>
+            {focusField === 1 && <Text color="gray" dimColor>  ← →</Text>}
+          </Box>
+        </Box>
+      )}
+
+      <Box marginTop={1}>
+        <Text color={focusField === totalFields - 1 ? '#5a96e0' : 'gray'} bold={focusField === totalFields - 1}>
+          {(focusField === totalFields - 1 ? '> ' : '  ') + '[ SAVE ]'}
+        </Text>
+        {focusField === totalFields - 1 && <Text color="gray" dimColor>  ← → switch section</Text>}
       </Box>
-    </Box>
+
+      {saveMsg !== '' && <Text color="green">{saveMsg}</Text>}
+    </ScreenLayout>
   )
 }
