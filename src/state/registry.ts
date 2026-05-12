@@ -83,7 +83,10 @@ function mergeDefaults(raw: unknown): Session {
     tmux_session: (obj.tmux_session as string) || '',
     tmux_window: (obj.tmux_window as string) || '',
     created_at: (obj.created_at as string) || nowIso(),
-    last_seen_at: (obj.last_seen_at as string) || nowIso()
+    last_seen_at: (obj.last_seen_at as string) || nowIso(),
+    working_dir: (obj.working_dir as string | null) ?? null,
+    ended_at: (obj.ended_at as string | null) ?? null,
+    rc_url: (obj.rc_url as string | null) ?? null
   }
 
   return merged
@@ -164,4 +167,9 @@ export function isStale(session: Session, thresholdS: number = 300): boolean {
   const diffS = diffMs / 1000
 
   return diffS > thresholdS
+}
+
+export function updateSession(sessionId: string, patch: Partial<Session>): void {
+  const session = read(sessionId)
+  write({ ...session, ...patch })
 }

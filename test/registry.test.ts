@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import type { Session } from '../src/state/types.js'
 
 let tmpDir: string
 
@@ -15,7 +16,7 @@ afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true })
 })
 
-function makeSession(id: string) {
+function makeSession(id: string): Session {
   return {
     id,
     name: `agent-${id}`,
@@ -34,6 +35,9 @@ function makeSession(id: string) {
     tmux_window: `agent-${id}`,
     created_at: new Date().toISOString(),
     last_seen_at: new Date().toISOString(),
+    working_dir: null,
+    ended_at: null,
+    rc_url: null,
   }
 }
 
@@ -114,5 +118,37 @@ describe('registry', () => {
     process.env.REEVES_REGISTRY = join(tmpDir, 'nonexistent')
     const { listAll } = await import('../src/state/registry.js')
     expect(listAll()).toEqual([])
+  })
+
+  it('updateSession patches a single field without disturbing others', async () => {
+    const { write, updateSession, read } = await import('../src/state/registry.js')
+    const session = makeSession('upd1')
+    write(session)
+    updateSession('upd1', { ended_at: '2026-01-01T00:00:00.000Z' })
+    const loaded = read('upd1')
+    expect(loaded.ended_at).toBe('2026-01-01T00:00:00.000Z')
+    expect(loaded.provider).toBe('cc')
+    expect(loaded.name).toBe('agent-upd1')
+  })
+
+  it('updateSession patches working_dir', async () => {
+    const { write, updateSession, read } = await import('../src/state/registry.js')
+    const session = makeSession('upd2')
+    write(session)
+    updateSession('upd2', { working_dir: '/home/user/project' })
+    const loaded = read('upd2')
+    expect(loaded.working_dir).toBe('/home/user/project')
+  })
+
+  it('read returns null for new Session fields when absent from file', async () => {
+    const { write, read } = await import('../src/state/registry.js')
+    const session = makeSession('legacy1')
+    const { working_dir, ended_at, rc_url, ...legacySession } = session
+    void working_dir; void ended_at; void rc_url
+    write(legacySession as Session)
+    const loaded = read('legacy1')
+    expect(loaded.working_dir).toBeNull()
+    expect(loaded.ended_at).toBeNull()
+    expect(loaded.rc_url).toBeNull()
   })
 })
