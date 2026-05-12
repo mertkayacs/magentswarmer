@@ -74,6 +74,9 @@ describe('doctor', () => {
       tmux_window: 'agent-test',
       created_at: new Date().toISOString(),
       last_seen_at: new Date().toISOString(),
+      working_dir: null,
+      ended_at: null,
+      rc_url: null,
     }
     write(session)
     expect(listAll().length).toBe(1)

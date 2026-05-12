@@ -31,7 +31,8 @@ function defaultSpawnFormState(): SpawnFormState {
     effort: 'high',
     tag: null,
     name: null,
-    prompt: ''
+    prompt: '',
+    working_dir: ''
   }
 }
 
@@ -103,7 +104,8 @@ function mergeDefaults(raw: unknown): AppState {
       effort: (ls.effort as Effort | null) ?? defaults.last_spawn.effort,
       tag: (ls.tag as string | null) ?? defaults.last_spawn.tag,
       name: (ls.name as string | null) ?? defaults.last_spawn.name,
-      prompt: (ls.prompt as string) || defaults.last_spawn.prompt
+      prompt: (ls.prompt as string) || defaults.last_spawn.prompt,
+      working_dir: (ls.working_dir as string) || defaults.last_spawn.working_dir
     }
   }
 
