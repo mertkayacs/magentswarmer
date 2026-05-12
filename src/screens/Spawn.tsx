@@ -2,9 +2,10 @@
 // Inputs: form state (pre-filled from loadState().last_spawn). Outputs: Session on submit.
 // Invariant: useScreenNav disabled while a text field is being edited.
 
-import React, { useState, useMemo } from 'react'
+import React, { useState, useMemo, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { homedir } from 'node:os'
+import { execFileSync } from 'node:child_process'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
 import { usePanes } from '../hooks/usePanes.js'
@@ -53,6 +54,9 @@ export function Spawn() {
   const [result, setResult] = useState<Session | null>(null)
   const [error, setError] = useState('')
 
+  const spinChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+  const [spinIdx, setSpinIdx] = useState(0)
+
   const savedState = loadState()
   const ls = savedState.last_spawn
   const [workingDir, setWorkingDir] = useState(ls.working_dir || process.cwd())
@@ -63,6 +67,15 @@ export function Spawn() {
   const [permissions, setPermissions] = useState<Permissions>(ls.permissions)
   const [model, setModel] = useState(ls.model ?? '')
   const [tag, setTag] = useState(ls.tag ?? '')
+
+  useEffect(() => {
+    if (result && !result.rc_url) {
+      const interval = setInterval(() => {
+        setSpinIdx(i => (i + 1) % spinChars.length)
+      }, 100)
+      return () => clearInterval(interval)
+    }
+  }, [result?.rc_url])
 
   const isTextField = TEXT_FIELDS.includes(focusIdx)
   const fieldFocused = editing && isTextField
@@ -75,6 +88,44 @@ export function Spawn() {
     if (focusIdx === 7) return (fn: (v: string) => string) => setTag(fn)
     return null
   }, [focusIdx])
+
+  // Result view keyboard handler
+  useInput((input, key) => {
+    if (!result) return
+    if (cmdMode) return
+
+    if (input === 'a') {
+      if (typeof process !== 'undefined' && process.env.TMUX) {
+        try {
+          execFileSync('tmux', ['switch-client', '-t', `${result.tmux_session}:${result.tmux_window}`], { stdio: 'ignore' })
+        } catch {
+          setError('tmux switch failed')
+          setTimeout(() => setError(''), 3000)
+        }
+      } else {
+        setError(`run: tmux attach -t ${result.tmux_session}:${result.tmux_window}`)
+        setTimeout(() => setError(''), 5000)
+      }
+      return
+    }
+
+    if (input === 'c' && result.rc_url) {
+      if (typeof process !== 'undefined') {
+        process.stdout.write('\x1b]52;c;' + Buffer.from(result.rc_url).toString('base64') + '\x07')
+      }
+      return
+    }
+
+    if (input === 'l') {
+      push('Sessions')
+      return
+    }
+
+    if (key.escape) {
+      pop()
+      return
+    }
+  }, { isActive: !!result && !cmdMode })
 
   // Text input handler
   useInput((input, key) => {
@@ -186,25 +237,54 @@ export function Spawn() {
         <Box marginBottom={1}>
           <Text color="#5a96e0" bold>REEVES AGENTS</Text>
           <Text color="#4a6fa5">  /spawn</Text>
+          <Text color="green" dimColor>  spawned</Text>
         </Box>
+
         <Box flexGrow={1} flexDirection="column">
-          <Text color="#4a6fa5">── SESSION ─────────────────────────────</Text>
-          <Box><Text color="gray" dimColor>  id          </Text><Text color="#7eb8f5">{result.id}</Text></Box>
-          <Box><Text color="gray" dimColor>  provider    </Text><Text color={providerColor(result.provider)}>●{result.provider}</Text></Box>
-          <Box><Text color="gray" dimColor>  name        </Text><Text>{result.name}</Text></Box>
-          {result.working_dir && <Box><Text color="gray" dimColor>  working dir </Text><Text color="gray">{result.working_dir.replace(homedir(), '~')}</Text></Box>}
-          {result.tag && <Box><Text color="gray" dimColor>  tag         </Text><Text>{result.tag}</Text></Box>}
-          <Box marginTop={1}>
-            <Text color="#4a6fa5">── ATTACH ──────────────────────────────</Text>
+          <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingLeft={1} paddingRight={1} marginBottom={1}>
+            <Text color="#4a6fa5">── SESSION ──────────────────────</Text>
+            <Box><Text color="gray" dimColor>{'id          '}</Text><Text color="#7eb8f5">{result.id}</Text></Box>
+            <Box><Text color="gray" dimColor>{'provider    '}</Text><Text color={providerColor(result.provider)}>●{result.provider}</Text></Box>
+            <Box><Text color="gray" dimColor>{'name        '}</Text><Text>{result.name}</Text></Box>
+            {result.working_dir && (
+              <Box><Text color="gray" dimColor>{'working dir '}</Text><Text color="gray">{result.working_dir.replace(homedir(), '~')}</Text></Box>
+            )}
+            {result.tag && (
+              <Box><Text color="gray" dimColor>{'tag         '}</Text><Text>{result.tag}</Text></Box>
+            )}
           </Box>
-          <Text color="gray" dimColor>  tmux attach -t {result.tmux_session}</Text>
-          <Text color="gray" dimColor>  tmux switch-client -t {result.tmux_session}:{result.tmux_window}</Text>
-          <Box marginTop={1}>
-            <Text color="gray" dimColor>l sessions  esc back</Text>
+
+          <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingLeft={1} paddingRight={1} marginBottom={1}>
+            <Text color="#4a6fa5">── ATTACH ───────────────────────</Text>
+            <Text color="gray" dimColor>tmux attach -t {result.tmux_session}:{result.tmux_window}</Text>
           </Box>
+
+          <Box flexDirection="column" borderStyle="round" borderColor={result.rc_url ? 'green' : 'gray'} paddingLeft={1} paddingRight={1} marginBottom={1}>
+            <Text color="#4a6fa5">── REMOTE CONTROL ───────────────</Text>
+            {!result.rc_url ? (
+              <Box>
+                <Text color="gray" dimColor>{spinChars[spinIdx]} </Text>
+                <Text color="gray" dimColor>waiting for URL...</Text>
+              </Box>
+            ) : (
+              <Box>
+                <Text color="green">{result.rc_url}</Text>
+                <Text color="gray" dimColor>  c to copy</Text>
+              </Box>
+            )}
+          </Box>
+
+          <Box marginTop={1}>
+            <Text color="gray" dimColor>a attach  c copy URL  l sessions  esc back</Text>
+          </Box>
+
+          {error && <Text color="yellow">{error}</Text>}
+
           <CommandPicker completions={completions} selectedIdx={selectedIdx} />
         </Box>
+
         <Box flexDirection="column">
+          {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
           <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
             <Text color="gray">/ </Text>
             <Text>{cmdMode ? cmdValue : ''}</Text>
