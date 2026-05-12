@@ -62,7 +62,7 @@ export function Home() {
     if (input === 'l') { push('Sessions'); return }
     if (input === 't') { push('Top'); return }
     if (input === 'd') { push('Doctor'); return }
-    if (input === 'h') { push('Help'); return }
+    if (input === 'h' || input === '?') { push('Help'); return }
     if (input === 'r') {
       setSessions(listSessions().filter(s => s.ended_at === null))
       setProviders(detectAvailable())
@@ -132,7 +132,8 @@ export function Home() {
             <Text color="#7eb8f5">l</Text><Text color="gray"> sessions  </Text>
             <Text color="#7eb8f5">t</Text><Text color="gray"> top  </Text>
             <Text color="#7eb8f5">d</Text><Text color="gray"> doctor  </Text>
-            <Text color="#7eb8f5">?</Text><Text color="gray"> help</Text>
+            <Text color="#7eb8f5">?</Text><Text color="gray"> help  </Text>
+            <Text color="#7eb8f5">r</Text><Text color="gray"> refresh</Text>
           </Box>
 
           <CommandPicker completions={completions} selectedIdx={selectedIdx} />
