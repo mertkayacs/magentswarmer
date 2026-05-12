@@ -43,6 +43,26 @@ function buildStartScript(
   return lines.join('\n') + '\n'
 }
 
+function uniqueWindowName(base: string, tmuxSession: string): string {
+  let existing: string[] = []
+  try {
+    const out = execFileSync(
+      'tmux', ['list-windows', '-t', tmuxSession, '-F', '#{window_name}'],
+      { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
+    )
+    existing = out.trim().split('\n').filter(Boolean)
+  } catch {
+    return base
+  }
+  const names = new Set(existing)
+  if (!names.has(base)) return base
+  for (let i = 2; i <= 99; i++) {
+    const candidate = `${base}-${i}`
+    if (!names.has(candidate)) return candidate
+  }
+  return `${base}-${Date.now()}`
+}
+
 export function spawn(req: SpawnRequest): Session {
   const available = detectAvailable()
   if (!available[req.provider]) {
@@ -51,6 +71,7 @@ export function spawn(req: SpawnRequest): Session {
 
   const sessionId = newId()
   const name = req.name || `${req.provider}-${sessionId}`
+  const windowName = uniqueWindowName(name, TMUX_SESSION)
 
   const workdir = join(homedir(), '.reeves', 'spawns', name)
   mkdirSync(workdir, { recursive: true })
@@ -81,14 +102,14 @@ export function spawn(req: SpawnRequest): Session {
   }
 
   // Create new window — args array avoids all shell quoting issues
-  execFileSync('tmux', ['new-window', '-d', '-t', TMUX_SESSION, '-n', name, '-c', workdir], {
+  execFileSync('tmux', ['new-window', '-d', '-t', TMUX_SESSION, '-n', windowName, '-c', workdir], {
     stdio: 'ignore',
   })
 
   // Write startup script with correct env and exec into provider CLI
   const scriptPath = join(workdir, '.start.sh')
   writeFileSync(scriptPath, buildStartScript(env, process.env as Record<string, string>, cmd), { mode: 0o755 })
-  execFileSync('tmux', ['send-keys', '-t', `${TMUX_SESSION}:${name}`, `bash ${shellQuote(scriptPath)}`, 'Enter'], {
+  execFileSync('tmux', ['send-keys', '-t', `${TMUX_SESSION}:${windowName}`, `bash ${shellQuote(scriptPath)}`, 'Enter'], {
     stdio: 'ignore',
   })
 
@@ -96,7 +117,7 @@ export function spawn(req: SpawnRequest): Session {
   // Uses tmux load-buffer (stdin) + paste-buffer to avoid any quoting issues.
   if (req.start_prompt) {
     const prompt = req.start_prompt
-    const target = `${TMUX_SESSION}:${name}`
+    const target = `${TMUX_SESSION}:${windowName}`
     setTimeout(() => {
       try {
         execFileSync('tmux', ['load-buffer', '-'], {
@@ -127,10 +148,10 @@ export function spawn(req: SpawnRequest): Session {
     start_prompt: req.start_prompt || null,
     goal: req.goal || null,
     tmux_session: TMUX_SESSION,
-    tmux_window: name,
+    tmux_window: windowName,
     created_at: now,
     last_seen_at: now,
-    working_dir: null,
+    working_dir: req.working_dir ?? process.cwd(),
     ended_at: null,
     rc_url: null,
   }
@@ -147,6 +168,7 @@ export function spawn(req: SpawnRequest): Session {
     tag: req.tag || null,
     name: req.name || null,
     prompt: req.start_prompt || '',
+    working_dir: req.working_dir ?? process.cwd(),
   })
   addRecentSession(sessionId)
 
