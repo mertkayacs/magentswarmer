@@ -5,7 +5,6 @@
 import React, { createContext, useContext, useState, useCallback } from 'react'
 import { useApp } from 'ink'
 import type { ScreenName, RouterContextValue } from './state/types.js'
-import { configExists } from './state/config.js'
 
 import { Welcome } from './screens/Welcome.js'
 import { Home } from './screens/Home.js'
@@ -27,7 +26,7 @@ export function useRouter(): RouterContextValue {
 }
 
 function initialStack(): ScreenName[] {
-  return [configExists() ? 'Home' : 'Welcome']
+  return ['Welcome']
 }
 
 function renderScreen(screen: ScreenName) {
