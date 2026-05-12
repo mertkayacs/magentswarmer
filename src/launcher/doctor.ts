@@ -3,14 +3,14 @@
 // Outputs: DoctorResult with checks and list of orphaned sessions.
 // Invariant: all checks complete even if some fail; orphans are sessions in registry but not in tmux.
 
-import { execSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { accessSync, constants } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { CheckResult } from '../state/types.js'
 import { detectAvailable } from './providers.js'
-import { registryDir, listAll as listSessions, remove as removeSession } from '../state/registry.js'
+import { listAll as listSessions, remove as removeSession } from '../state/registry.js'
 
 export interface DoctorResult {
   checks: CheckResult[]
@@ -30,18 +30,19 @@ function checkNodeVersion(): CheckResult {
 
 function checkTmux(): CheckResult {
   try {
-    const version = execSync('tmux -V', { encoding: 'utf8' }).trim()
-    return {
-      name: 'tmux',
-      status: 'ok',
-      detail: version
+    const versionStr = execFileSync('tmux', ['-V'], { encoding: 'utf8' }).trim()
+    const match = versionStr.match(/tmux (\d+)\.(\d+)/)
+    if (!match) {
+      return { name: 'tmux', status: 'warn', detail: `unexpected version format: ${versionStr}` }
     }
+    const major = parseInt(match[1] ?? '0', 10)
+    const minor = parseInt(match[2] ?? '0', 10)
+    if (major < 3) {
+      return { name: 'tmux', status: 'warn', detail: `tmux ${major}.${minor} — upgrade to 3.0+ recommended` }
+    }
+    return { name: 'tmux', status: 'ok', detail: `tmux ${major}.${minor}` }
   } catch {
-    return {
-      name: 'tmux',
-      status: 'fail',
-      detail: 'not on PATH (brew install tmux)'
-    }
+    return { name: 'tmux', status: 'fail', detail: 'not on PATH (brew install tmux)' }
   }
 }
 
