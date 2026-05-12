@@ -21,3 +21,17 @@ export function formatAge(isoDate: string): string {
   if (h < 24) return `${h}h`
   return `${Math.floor(h / 24)}d`
 }
+
+export function formatDuration(createdAt: string, endedAt: string): string {
+  const ms = new Date(endedAt).getTime() - new Date(createdAt).getTime()
+  const s = Math.floor(ms / 1000)
+  if (s < 60) return `${s}s`
+  const m = Math.floor(s / 60)
+  if (m < 60) {
+    const rs = s % 60
+    return `${m}m ${rs}s`
+  }
+  const h = Math.floor(m / 60)
+  const rm = m % 60
+  return `${h}h ${rm}m`
+}
