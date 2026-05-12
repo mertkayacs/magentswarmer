@@ -87,4 +87,24 @@ describe('store', () => {
     expect(loadState().presets.length).toBe(1)
     expect(loadState().presets[0]?.goal).toBe('goal2')
   })
+
+  it('defaultState includes working_dir in last_spawn', async () => {
+    const { defaultState } = await import('../src/state/store.js')
+    const s = defaultState()
+    expect(s.last_spawn.working_dir).toBe('')
+  })
+
+  it('setLastSpawn persists working_dir', async () => {
+    const { setLastSpawn, loadState } = await import('../src/state/store.js')
+    setLastSpawn({ working_dir: '/home/user/project' })
+    expect(loadState().last_spawn.working_dir).toBe('/home/user/project')
+  })
+
+  it('setLastSpawn working_dir survives save/load roundtrip', async () => {
+    const { setLastSpawn, loadState } = await import('../src/state/store.js')
+    setLastSpawn({ prompt: 'build it', working_dir: '/srv/app' })
+    const s = loadState()
+    expect(s.last_spawn.prompt).toBe('build it')
+    expect(s.last_spawn.working_dir).toBe('/srv/app')
+  })
 })

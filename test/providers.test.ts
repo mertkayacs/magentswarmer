@@ -46,6 +46,25 @@ describe('providers', () => {
       expect(buildCommand({ provider: 'codex', auth: 'subscription', permissions: 'ask' })[0]).toBe('codex')
       expect(buildCommand({ provider: 'gemini', auth: 'subscription', permissions: 'ask' })[0]).toBe('gemini')
     })
+
+    // B1 regression: buildCommand must always return an array so tmux execFileSync
+    // receives separate argv entries rather than a shell-interpolated string.
+    it('always returns an array for all providers', () => {
+      const providers = ['cc', 'codex', 'gemini'] as const
+      for (const provider of providers) {
+        const cmd = buildCommand({ provider, auth: 'subscription', permissions: 'ask' })
+        expect(Array.isArray(cmd)).toBe(true)
+        expect(cmd.length).toBeGreaterThan(0)
+        expect(typeof cmd[0]).toBe('string')
+      }
+    })
+
+    it('every element is a string (no nested arrays or objects)', () => {
+      const cmd = buildCommand({ provider: 'cc', auth: 'subscription', permissions: 'skip', model: 'opus' })
+      for (const arg of cmd) {
+        expect(typeof arg).toBe('string')
+      }
+    })
   })
 
   describe('buildEnv', () => {
