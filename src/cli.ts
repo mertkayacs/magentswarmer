@@ -6,6 +6,7 @@ import React from 'react'
 import { render } from 'ink'
 import { Command } from 'commander'
 import { Router } from './router.js'
+import { Switch } from './screens/Switch.js'
 import { spawn } from './launcher/spawn.js'
 import { orchestrate } from './launcher/orchestrate.js'
 import { peek } from './launcher/peek.js'
@@ -13,6 +14,9 @@ import { runDoctor, pruneOrphans } from './launcher/doctor.js'
 import { listAll as listSessions, remove as removeSession } from './state/registry.js'
 import { loadConfig } from './state/config.js'
 import { execFileSync } from 'node:child_process'
+import { readFileSync, writeFileSync, existsSync } from 'node:fs'
+import { homedir } from 'node:os'
+import { join } from 'node:path'
 import type { Provider, Auth, Effort, Permissions } from './state/types.js'
 
 const program = new Command()
@@ -182,6 +186,45 @@ program
     const cfg = loadConfig()
     for (const [name, p] of Object.entries(cfg.providers)) {
       console.log(`${name.padEnd(8)} auth=${p.auth}  perms=${p.default_permissions}  effort=${p.default_effort ?? '—'}`)
+    }
+  })
+
+program
+  .command('switch')
+  .description('interactive session picker — select a session to attach to')
+  .action(() => {
+    const { unmount } = render(
+      React.createElement(Switch, { onExit: () => { unmount(); process.exit(0) } })
+    )
+  })
+
+const TMUX_CONF = join(homedir(), '.tmux.conf')
+const SETUP_MARKER = '# reevesagents'
+const POPUP_BINDING = `bind-key A display-popup -w 90 -h 20 -E "reevesagents switch"`
+
+program
+  .command('setup-tmux')
+  .description('add reevesagents session picker binding (Prefix+A) to ~/.tmux.conf')
+  .action(() => {
+    const existing = existsSync(TMUX_CONF) ? readFileSync(TMUX_CONF, 'utf-8') : ''
+    if (existing.includes(SETUP_MARKER)) {
+      console.log('reevesagents binding already present in ~/.tmux.conf')
+      console.log('  Prefix+A opens the session picker from anywhere in tmux')
+      process.exit(0)
+    }
+    const block = `\n${SETUP_MARKER}\n${POPUP_BINDING}\n`
+    writeFileSync(TMUX_CONF, existing + block, 'utf-8')
+    console.log('added to ~/.tmux.conf:')
+    console.log(`  ${POPUP_BINDING}`)
+    if (process.env.TMUX) {
+      try {
+        execFileSync('tmux', ['source-file', TMUX_CONF], { stdio: 'ignore' })
+        console.log('reloaded tmux config — Prefix+A is live')
+      } catch {
+        console.log('could not auto-reload — run: tmux source-file ~/.tmux.conf')
+      }
+    } else {
+      console.log('reload tmux config to activate: tmux source-file ~/.tmux.conf')
     }
   })
 
