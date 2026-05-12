@@ -53,9 +53,12 @@ export function Spawn() {
   const [editing, setEditing] = useState(false)
   const [result, setResult] = useState<Session | null>(null)
   const [error, setError] = useState('')
+  const [spawning, setSpawning] = useState(false)
+  const [spawnSpinIdx, setSpawnSpinIdx] = useState(0)
 
   const spinChars = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
   const [spinIdx, setSpinIdx] = useState(0)
+  const SPAWN_SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
   const savedState = loadState()
   const ls = savedState.last_spawn
@@ -77,15 +80,23 @@ export function Spawn() {
     }
   }, [result?.rc_url])
 
+  useEffect(() => {
+    if (!spawning) return
+    const interval = setInterval(() => {
+      setSpawnSpinIdx(i => (i + 1) % SPAWN_SPINNER.length)
+    }, 80)
+    return () => clearInterval(interval)
+  }, [spawning])
+
   const isTextField = TEXT_FIELDS.includes(focusIdx)
   const fieldFocused = editing && isTextField
   const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = useScreenNav(push, pop, fieldFocused)
 
   const currentFieldSetter = useMemo(() => {
-    if (focusIdx === 0) return (fn: (v: string) => string) => setWorkingDir(fn)
-    if (focusIdx === 3) return (fn: (v: string) => string) => setTask(fn)
-    if (focusIdx === 6) return (fn: (v: string) => string) => setModel(fn)
-    if (focusIdx === 7) return (fn: (v: string) => string) => setTag(fn)
+    if (focusIdx === 0) return (fn: (_v: string) => string) => setWorkingDir(fn)
+    if (focusIdx === 3) return (fn: (_v: string) => string) => setTask(fn)
+    if (focusIdx === 6) return (fn: (_v: string) => string) => setModel(fn)
+    if (focusIdx === 7) return (fn: (_v: string) => string) => setTag(fn)
     return null
   }, [focusIdx])
 
@@ -168,6 +179,8 @@ export function Spawn() {
       if (focusIdx === TOTAL_FIELDS - 1) {
         if (!task.trim()) { setError('task is required'); return }
         setError('')
+        setSpawning(true)
+        setSpawnSpinIdx(0)
         try {
           const session = spawn({
             provider,
@@ -180,8 +193,10 @@ export function Spawn() {
             working_dir: workingDir || undefined,
           })
           setResult(session)
+          setSpawning(false)
         } catch (err) {
           setError(err instanceof Error ? err.message : 'spawn failed')
+          setSpawning(false)
         }
       }
     }
@@ -307,24 +322,32 @@ export function Spawn() {
       {/* Zone 2 */}
       <Box flexGrow={1} flexDirection={panes >= 2 ? 'row' : 'column'}>
         <Box flexDirection="column" flexGrow={1}>
-          <Box flexDirection="column" marginBottom={1}>
-            {textRow(0, 'working dir', workingDir, process.cwd())}
-            {selectRow(1, 'provider', PROVIDERS, provider, v => v ?? '—')}
-            {selectRow(2, 'auth', AUTHS, auth)}
-            {textRow(3, 'task', task, '(required) what should the agent do?')}
-            {selectRow(4, 'effort', EFFORTS, effort, effortLabel)}
-            {selectRow(5, 'permissions', PERMS, permissions)}
-            {textRow(6, 'model', model, '(optional) leave blank for default')}
-            {textRow(7, 'tag', tag, '(optional) e.g. feature-branch')}
-          </Box>
+          {spawning ? (
+            <Box marginBottom={1}>
+              <Text color="#5a96e0">{SPAWN_SPINNER[spawnSpinIdx]} spawning...</Text>
+            </Box>
+          ) : (
+            <Box flexDirection="column" marginBottom={1}>
+              {textRow(0, 'working dir', workingDir, process.cwd())}
+              {selectRow(1, 'provider', PROVIDERS, provider, v => v ?? '—')}
+              {selectRow(2, 'auth', AUTHS, auth)}
+              {textRow(3, 'task', task, '(required) what should the agent do?')}
+              {selectRow(4, 'effort', EFFORTS, effort, effortLabel)}
+              {selectRow(5, 'permissions', PERMS, permissions)}
+              {textRow(6, 'model', model, '(optional) leave blank for default')}
+              {textRow(7, 'tag', tag, '(optional) e.g. feature-branch')}
+            </Box>
+          )}
 
           {error && <Text color="red">{error}</Text>}
 
-          <Box>
-            <Text color={focusIdx === TOTAL_FIELDS - 1 ? '#5a96e0' : 'gray'} bold={focusIdx === TOTAL_FIELDS - 1}>
-              {marker(TOTAL_FIELDS - 1)} [ LAUNCH ]
-            </Text>
-          </Box>
+          {!spawning && (
+            <Box>
+              <Text color={focusIdx === TOTAL_FIELDS - 1 ? '#5a96e0' : 'gray'} bold={focusIdx === TOTAL_FIELDS - 1}>
+                {marker(TOTAL_FIELDS - 1)} [ LAUNCH ]
+              </Text>
+            </Box>
+          )}
 
           <CommandPicker completions={completions} selectedIdx={selectedIdx} />
         </Box>
