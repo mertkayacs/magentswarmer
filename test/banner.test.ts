@@ -42,4 +42,33 @@ describe('banner', () => {
     expect(linesHoriz[0]![0]!.color).toBe(linesDefault[0]![0]!.color)
     expect(linesHoriz[0]![4]!.color).toBe(linesDefault[0]![4]!.color)
   })
+
+  it('output line count matches input line count for single line', async () => {
+    const { gradientChars } = await import('../src/brand/banner.js')
+    const lines = gradientChars('HELLO', ['#ff0000', '#0000ff'])
+    expect(lines.length).toBe(1)
+  })
+
+  it('output line count matches input line count for multi-line art', async () => {
+    const { gradientChars } = await import('../src/brand/banner.js')
+    const art = 'AAA\nBBB\nCCC\nDDD'
+    const lines = gradientChars(art, ['#000000', '#ffffff'])
+    expect(lines.length).toBe(4)
+  })
+
+  it('each output line has same character count as corresponding input line', async () => {
+    const { gradientChars } = await import('../src/brand/banner.js')
+    const art = 'HELLO\nWORLD\nABC'
+    const lines = gradientChars(art, ['#ff0000', '#0000ff'])
+    expect(lines[0]!.length).toBe(5)
+    expect(lines[1]!.length).toBe(5)
+    expect(lines[2]!.length).toBe(3)
+  })
+
+  it('single character art returns one line with one entry', async () => {
+    const { gradientChars } = await import('../src/brand/banner.js')
+    const lines = gradientChars('X', ['#aaaaaa', '#bbbbbb'])
+    expect(lines.length).toBe(1)
+    expect(lines[0]!.length).toBe(1)
+  })
 })
