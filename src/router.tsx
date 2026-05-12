@@ -45,7 +45,7 @@ function renderScreen(screen: ScreenName) {
 }
 
 export function Router() {
-  const { exit } = useApp()
+  const { exit: _exit } = useApp()
   const [stack, setStack] = useState<ScreenName[]>(initialStack)
 
   const push = useCallback((screen: ScreenName) => {
@@ -59,10 +59,6 @@ export function Router() {
   const replace = useCallback((screen: ScreenName) => {
     setStack(prev => [...prev.slice(0, -1), screen])
   }, [])
-
-  const onQuit = useCallback(() => {
-    exit()
-  }, [exit])
 
   const current = stack[stack.length - 1] ?? 'Home'
 

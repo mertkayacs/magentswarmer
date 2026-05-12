@@ -1,6 +1,13 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach, afterEach } from 'vitest'
 
 describe('banner', () => {
+  beforeEach(() => {
+    process.env.FORCE_COLOR = '3'
+  })
+  afterEach(() => {
+    delete process.env.FORCE_COLOR
+  })
+
   it('gradientChars horizontal: left and right chars have different colors', async () => {
     const { gradientChars } = await import('../src/brand/banner.js')
     const lines = gradientChars('ABCDE', ['#000000', '#ffffff'])

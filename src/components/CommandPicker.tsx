@@ -5,6 +5,7 @@
 
 import React from 'react'
 import { Box, Text } from 'ink'
+import chalk from 'chalk'
 import type { DeduplicatedRoute } from '../hooks/useScreenNav.js'
 
 interface Props {
@@ -16,6 +17,16 @@ export function CommandPicker({ completions, selectedIdx }: Props) {
   if (completions.length === 0) return null
 
   const visible = completions.slice(0, 5)
+  const hexOk = chalk.level >= 3
+
+  const focusColor = hexOk ? '#5a96e0' : 'blue'
+  const dimColor = hexOk ? '#30363d' : 'gray'
+  const labelColor = hexOk ? '#7eb8f5' : 'cyan'
+  const dimLabelColor = hexOk ? '#484f58' : 'gray'
+  const aliasColor = hexOk ? '#4a6fa5' : 'blue'
+  const dimAliasColor = hexOk ? '#21262d' : 'gray'
+  const descColor = hexOk ? '#8b949e' : 'gray'
+  const dimDescColor = hexOk ? '#1e2d3e' : 'gray'
 
   return (
     <Box flexDirection="column" marginBottom={0}>
@@ -23,18 +34,18 @@ export function CommandPicker({ completions, selectedIdx }: Props) {
         const isSelected = i === selectedIdx
         return (
           <Box key={route.primary}>
-            <Text color={isSelected ? '#5a96e0' : '#30363d'}>
+            <Text color={isSelected ? focusColor : dimColor}>
               {isSelected ? '●' : '○'}
             </Text>
-            <Text color={isSelected ? '#7eb8f5' : '#484f58'} bold={isSelected}>
+            <Text color={isSelected ? labelColor : dimLabelColor} bold={isSelected}>
               {' '}{route.primary}
             </Text>
             {route.alias.length > 0 && (
-              <Text color={isSelected ? '#4a6fa5' : '#21262d'}>
+              <Text color={isSelected ? aliasColor : dimAliasColor}>
                 {'  '}{route.alias}
               </Text>
             )}
-            <Text color={isSelected ? '#8b949e' : '#1e2d3e'}>
+            <Text color={isSelected ? descColor : dimDescColor}>
               {'  — '}{route.description}
             </Text>
           </Box>

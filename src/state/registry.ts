@@ -4,7 +4,7 @@
 
 import { readFileSync, writeFileSync, readdirSync, unlinkSync, mkdirSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, dirname } from 'node:path'
+import { join } from 'node:path'
 import { randomInt } from 'node:crypto'
 import type { Session, Provider, Auth, Effort, Permissions } from './types.js'
 
@@ -119,7 +119,7 @@ export function read(sessionId: string): Session {
 
 export function listAll(): Session[] {
   const dir = registryDir()
-  let files: string[] = []
+  let files: string[]
 
   try {
     files = readdirSync(dir).filter(f => f.endsWith('.json'))

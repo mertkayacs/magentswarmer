@@ -160,7 +160,7 @@ export interface CheckResult {
 // Router context shape
 export interface RouterContextValue {
   screen: ScreenName
-  push: (screen: ScreenName) => void
+  push: (_screen: ScreenName) => void
   pop: () => void
-  replace: (screen: ScreenName) => void
+  replace: (_screen: ScreenName) => void
 }

@@ -46,7 +46,7 @@ interface ScreenNavState {
 }
 
 export function useScreenNav(
-  push: (screen: ScreenName) => void,
+  push: (_screen: ScreenName) => void,
   pop: () => void,
   disabled = false,
 ): ScreenNavState {
