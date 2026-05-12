@@ -44,7 +44,7 @@ function buildStartScript(
 }
 
 function uniqueWindowName(base: string, tmuxSession: string): string {
-  let existing: string[] = []
+  let existing: string[]
   try {
     const out = execFileSync(
       'tmux', ['list-windows', '-t', tmuxSession, '-F', '#{window_name}'],

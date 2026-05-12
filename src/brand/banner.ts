@@ -1,6 +1,8 @@
 // ANSI Shadow ASCII art for "REEVES" and "AGENTS" with per-column blue gradient.
 // No runtime figlet calls; art is committed verbatim. Single source of brand truth.
 
+import chalk from 'chalk'
+
 export const REEVES_ART = `\
 ██████╗ ███████╗███████╗██╗   ██╗███████╗███████╗
 ██╔══██╗██╔════╝██╔════╝██║   ██║██╔════╝██╔════╝
@@ -71,6 +73,11 @@ export function gradientChars(
   stops: readonly string[] = GRADIENT_STOPS,
   direction: 'horizontal' | 'diagonal' = 'horizontal',
 ): ColoredChar[][] {
+  if (chalk.level < 3) {
+    return art.split('\n').map(line =>
+      Array.from(line).map(char => ({ char, color: 'white' }))
+    )
+  }
   const lines = art.split('\n')
   const width = Math.max(...lines.map(l => l.length), 1)
   const height = Math.max(lines.length, 1)

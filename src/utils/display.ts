@@ -2,6 +2,7 @@
 // Inputs: Provider enum, timestamps. Outputs: color strings, formatted strings.
 // Invariant: providerColor always returns a valid hex string or named color.
 
+import chalk from 'chalk'
 import type { Provider } from '../state/types.js'
 
 export function providerColor(p: Provider): string {
@@ -34,4 +35,12 @@ export function formatDuration(createdAt: string, endedAt: string): string {
   const h = Math.floor(m / 60)
   const rm = m % 60
   return `${h}h ${rm}m`
+}
+
+export function supportsColor(): boolean {
+  return chalk.level >= 2
+}
+
+export function supportsHex(): boolean {
+  return chalk.level >= 3
 }

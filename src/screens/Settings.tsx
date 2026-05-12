@@ -67,7 +67,7 @@ export function Settings() {
     return true
   }
 
-  function updateProviderField(field: ProviderField, updater: (v: string) => string) {
+  function updateProviderField(field: ProviderField, updater: (_v: string) => string) {
     if (section === 'global') return
     const s = section as Provider
     setConfig(c => ({
@@ -79,7 +79,7 @@ export function Settings() {
     }))
   }
 
-  function updateGlobalText(field: 'tmux_session_name', updater: (v: string) => string) {
+  function updateGlobalText(field: 'tmux_session_name', updater: (_v: string) => string) {
     setConfig(c => ({
       ...c,
       global: { ...c.global, [field]: updater(c.global[field]) }
