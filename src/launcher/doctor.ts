@@ -18,29 +18,13 @@ export interface DoctorResult {
 }
 
 function checkNodeVersion(): CheckResult {
-  try {
-    const version = execSync('node -v', { encoding: 'utf8' }).trim().slice(1)
-    const [major] = version.split('.').map(Number)
-
-    if (major >= 20) {
-      return {
-        name: 'node',
-        status: 'ok',
-        detail: version
-      }
-    } else {
-      return {
-        name: 'node',
-        status: 'fail',
-        detail: `${version} (need >=20.0.0)`
-      }
-    }
-  } catch {
-    return {
-      name: 'node',
-      status: 'fail',
-      detail: 'not found'
-    }
+  // process.version is authoritative — no need for a subprocess
+  const version = process.version.slice(1) // strip leading 'v'
+  const major = parseInt(version.split('.')[0] ?? '0', 10)
+  return {
+    name: 'node',
+    status: major >= 20 ? 'ok' : 'fail',
+    detail: major >= 20 ? version : `${version} (need >=20.0.0)`,
   }
 }
 

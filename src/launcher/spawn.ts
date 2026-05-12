@@ -3,34 +3,34 @@
 // Outputs: Session written to registry and returned.
 // Invariant: every session has a unique id and corresponding tmux window.
 
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { SpawnRequest, Session } from '../state/types.js'
 import { buildEnv, buildCommand, detectAvailable } from './providers.js'
-import {
-  registryDir, newId, write as writeSession, nowIso
-} from '../state/registry.js'
+import { registryDir, newId, write as writeSession, nowIso } from '../state/registry.js'
+import { setLastSpawn, addRecentSession } from '../state/store.js'
 
 export const TMUX_SESSION = 'reevesagents'
 
+// How long to wait (ms) before sending the initial prompt to a fresh window.
+// The provider CLI needs time to start up and render its initial UI.
+// Override with REEVES_INITIAL_PROMPT_DELAY_MS env var on slow machines.
+const INITIAL_PROMPT_DELAY_MS = parseInt(process.env.REEVES_INITIAL_PROMPT_DELAY_MS ?? '1500', 10)
+
 export function spawn(req: SpawnRequest): Session {
-  // Check provider is available
   const available = detectAvailable()
   if (!available[req.provider]) {
     throw new Error(`Provider '${req.provider}' not found on PATH`)
   }
 
-  // Generate session id and derive name
   const sessionId = newId()
   const name = req.name || `${req.provider}-${sessionId}`
 
-  // Create working directory
   const workdir = join(homedir(), '.reeves', 'spawns', name)
   mkdirSync(workdir, { recursive: true })
 
-  // Build spawn config from request
   const cfg = {
     provider: req.provider,
     auth: req.auth,
@@ -38,53 +38,53 @@ export function spawn(req: SpawnRequest): Session {
     model: req.model || null,
     key_ref: req.key_ref || null,
     permissions: req.permissions || 'skip' as const,
-    effort: req.effort || null
+    effort: req.effort || null,
   }
 
-  // Build environment variables
+  // Build env — pass parent ID only when set
   const env = buildEnv(cfg, process.env as Record<string, string>)
   env.REEVES_SESSION_ID = sessionId
-  env.REEVES_PARENT_ID = req.parent_id || ''
+  if (req.parent_id) env.REEVES_PARENT_ID = req.parent_id
   env.REEVES_REGISTRY = registryDir()
 
-  // Build command
   const cmd = buildCommand(cfg)
 
   // Ensure tmux session exists
   try {
-    execSync(`tmux has-session -t ${TMUX_SESSION}`, { stdio: 'ignore' })
+    execFileSync('tmux', ['has-session', '-t', TMUX_SESSION], { stdio: 'ignore' })
   } catch {
-    execSync(`tmux new-session -d -s ${TMUX_SESSION}`, { stdio: 'ignore' })
+    execFileSync('tmux', ['new-session', '-d', '-s', TMUX_SESSION], { stdio: 'ignore' })
   }
 
-  // Create window in session
-  execSync(
-    `tmux new-window -d -t ${TMUX_SESSION} -n ${name} -c ${workdir}`,
-    { stdio: 'ignore' }
-  )
+  // Create new window — args array avoids all shell quoting issues
+  execFileSync('tmux', ['new-window', '-d', '-t', TMUX_SESSION, '-n', name, '-c', workdir], {
+    stdio: 'ignore',
+  })
 
-  // Send command to window
-  const cmdStr = cmd.join(' ')
-  execSync(
-    `tmux send-keys -t ${TMUX_SESSION}:${name} '${cmdStr}' Enter`,
-    { stdio: 'ignore' }
-  )
+  // Send the provider CLI command to the window
+  execFileSync('tmux', ['send-keys', '-t', `${TMUX_SESSION}:${name}`, cmd.join(' '), 'Enter'], {
+    stdio: 'ignore',
+  })
 
-  // If start_prompt provided, send it after a brief moment
+  // Send start_prompt after the provider CLI has had time to start.
+  // Uses tmux load-buffer (stdin) + paste-buffer to avoid any quoting issues.
   if (req.start_prompt) {
+    const prompt = req.start_prompt
+    const target = `${TMUX_SESSION}:${name}`
     setTimeout(() => {
       try {
-        execSync(
-          `tmux send-keys -t ${TMUX_SESSION}:${name} '${req.start_prompt}' Enter`,
-          { stdio: 'ignore' }
-        )
+        execFileSync('tmux', ['load-buffer', '-'], {
+          input: prompt,
+          stdio: ['pipe', 'ignore', 'ignore'],
+        })
+        execFileSync('tmux', ['paste-buffer', '-t', target], { stdio: 'ignore' })
+        execFileSync('tmux', ['send-keys', '-t', target, '', 'Enter'], { stdio: 'ignore' })
       } catch {
-        // silently ignore if tmux fails (window may have closed)
+        // Window may have closed before the delay elapsed
       }
-    }, 1000)
+    }, INITIAL_PROMPT_DELAY_MS)
   }
 
-  // Write session to registry
   const now = nowIso()
   const session: Session = {
     id: sessionId,
@@ -103,9 +103,23 @@ export function spawn(req: SpawnRequest): Session {
     tmux_session: TMUX_SESSION,
     tmux_window: name,
     created_at: now,
-    last_seen_at: now
+    last_seen_at: now,
   }
 
   writeSession(session)
+
+  // Update app store so history and last-used form state are current
+  setLastSpawn({
+    provider: req.provider,
+    auth: req.auth,
+    model: req.model || null,
+    permissions: cfg.permissions,
+    effort: cfg.effort,
+    tag: req.tag || null,
+    name: req.name || null,
+    prompt: req.start_prompt || '',
+  })
+  addRecentSession(sessionId)
+
   return session
 }
