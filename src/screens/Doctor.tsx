@@ -6,8 +6,8 @@ import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
+import { usePanes } from '../hooks/usePanes.js'
 import { CommandPicker } from '../components/CommandPicker.js'
-import { StatusBar } from '../components/StatusBar.js'
 import { runDoctor, pruneOrphans } from '../launcher/doctor.js'
 import type { DoctorResult } from '../launcher/doctor.js'
 import type { Session } from '../state/types.js'
@@ -26,6 +26,7 @@ function statusColor(status: 'ok' | 'warn' | 'fail'): string {
 
 export function Doctor() {
   const { push, pop } = useRouter()
+  const panes = usePanes()
   const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = useScreenNav(push, pop)
   const [result, setResult] = useState<DoctorResult | null>(null)
   const [pruned, setPruned] = useState(false)
@@ -52,50 +53,64 @@ export function Doctor() {
   return (
     <Box flexDirection="column" paddingX={1}>
       <Box marginBottom={1}>
-        <Text color="#5a96e0" bold>doctor</Text>
+        <Text color="#5a96e0" bold>REEVES AGENTS</Text>
+        <Text color="#4a6fa5">  /doctor · system health checks</Text>
       </Box>
 
-      {!result && <Text color="gray" dimColor>running checks...</Text>}
+      <Box flexGrow={1} flexDirection={panes >= 2 ? 'row' : 'column'}>
+        <Box flexDirection="column" flexGrow={1}>
+          {!result && <Text color="gray" dimColor>running checks...</Text>}
 
-      {result && (
-        <Box flexDirection="column" marginBottom={1}>
-          {result.checks.map(check => (
-            <Box key={check.name}>
-              <Text color={statusColor(check.status)}>{statusIcon(check.status)}</Text>
-              <Text> {check.name.padEnd(14)}</Text>
-              <Text color="gray">{check.detail}</Text>
-            </Box>
-          ))}
-
-          {result.orphans.length > 0 && !pruned && (
-            <Box flexDirection="column" marginTop={1}>
-              <Text color="yellow">{result.orphans.length} orphan session{result.orphans.length !== 1 ? 's' : ''} in registry</Text>
-              {result.orphans.map((s: Session) => (
-                <Text key={s.id} color="gray" dimColor>  {s.id}  {s.name}</Text>
+          {result && (
+            <Box flexDirection="column" marginBottom={1}>
+              {result.checks.map(check => (
+                <Box key={check.name}>
+                  <Text color={statusColor(check.status)}>{statusIcon(check.status)}</Text>
+                  <Text> {check.name.padEnd(14)}</Text>
+                  <Text color="gray">{check.detail}</Text>
+                </Box>
               ))}
-              <Text color="gray" dimColor>press p to prune, r to re-run</Text>
+
+              {result.orphans.length > 0 && !pruned && (
+                <Box flexDirection="column" marginTop={1}>
+                  <Text color="yellow">{result.orphans.length} orphan session{result.orphans.length !== 1 ? 's' : ''}</Text>
+                  {result.orphans.map((s: Session) => (
+                    <Text key={s.id} color="gray" dimColor>  {s.id}</Text>
+                  ))}
+                  <Text color="gray" dimColor>p to prune, r to re-run</Text>
+                </Box>
+              )}
+
+              {pruned && (
+                <Box marginTop={1}>
+                  <Text color="green">orphans pruned</Text>
+                </Box>
+              )}
+
+              {result.orphans.length === 0 && !pruned && (
+                <Box marginTop={1}>
+                  <Text color={allOk ? 'green' : 'yellow'}>
+                    {allOk ? 'all checks passed' : 'some checks need attention'}
+                  </Text>
+                  <Text color="gray" dimColor>r to re-run</Text>
+                </Box>
+              )}
             </Box>
           )}
 
-          {pruned && (
-            <Box marginTop={1}>
-              <Text color="green">orphans pruned</Text>
-            </Box>
-          )}
-
-          {result.orphans.length === 0 && !pruned && (
-            <Box marginTop={1}>
-              <Text color={allOk ? 'green' : 'yellow'}>
-                {allOk ? 'all checks passed' : 'some checks need attention'}
-              </Text>
-              <Text color="gray" dimColor>  press r to re-run</Text>
-            </Box>
-          )}
+          <CommandPicker completions={completions} selectedIdx={selectedIdx} />
         </Box>
-      )}
 
-      <Box flexDirection="column" marginTop={1}>
-        <CommandPicker completions={completions} selectedIdx={selectedIdx} />
+        {panes >= 2 && (
+          <Box flexDirection="column" width={40} marginLeft={2} borderStyle="round" borderColor="#1e2d3e" paddingLeft={1} paddingRight={1}>
+            <Text color="gray" bold>FIX HINTS</Text>
+            <Text color="gray" dimColor>p to prune orphans</Text>
+            <Text color="gray" dimColor>r to re-run checks</Text>
+          </Box>
+        )}
+      </Box>
+
+      <Box flexDirection="column">
         {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
         <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
           <Text color="gray">/ </Text>
@@ -103,8 +118,6 @@ export function Doctor() {
           {!cmdMode && <Text color="gray" dimColor>type a command</Text>}
         </Box>
       </Box>
-
-      <StatusBar screen="doctor" />
     </Box>
   )
 }

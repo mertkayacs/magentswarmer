@@ -6,11 +6,11 @@ import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
+import { usePanes } from '../hooks/usePanes.js'
 import { CommandPicker } from '../components/CommandPicker.js'
-import { StatusBar } from '../components/StatusBar.js'
 import { FieldHint } from '../components/FieldHint.js'
 import { orchestrate } from '../launcher/orchestrate.js'
-import { loadConfig } from '../state/config.js'
+import { loadState } from '../state/store.js'
 import type { Provider, Auth, Effort, Permissions, Session, WorkerEntry } from '../state/types.js'
 
 const PROVIDERS: Provider[] = ['cc', 'codex', 'gemini']
@@ -31,22 +31,20 @@ function headerCount() { return 6 }
 
 export function Orchestrate() {
   const { push, pop } = useRouter()
+  const panes = usePanes()
   const [focusIdx, setFocusIdx] = useState(0)
   const [editing, setEditing] = useState(false)
   const [result, setResult] = useState<Session[] | null>(null)
   const [error, setError] = useState('')
 
-  const cfg = loadConfig()
-  const [goal, setGoal] = useState('')
-  const [tag, setTag] = useState('')
-  const [provider, setProvider] = useState<Provider>('cc')
-  const [auth, setAuth] = useState<Auth>(cfg.providers.cc.auth)
-  const [effort, setEffort] = useState<Effort | null>(cfg.providers.cc.default_effort)
-  const [permissions, setPermissions] = useState<Permissions>(cfg.providers.cc.default_permissions)
-  const [workers, setWorkers] = useState<WorkerEntry[]>([
-    { name: 'agent-1', prompt: '' },
-    { name: 'agent-2', prompt: '' },
-  ])
+  const lo = loadState().last_orchestrate
+  const [goal, setGoal] = useState(lo.goal)
+  const [tag, setTag] = useState(lo.tag)
+  const [provider, setProvider] = useState<Provider>(lo.shared.provider)
+  const [auth, setAuth] = useState<Auth>(lo.shared.auth)
+  const [effort, setEffort] = useState<Effort | null>(lo.shared.effort)
+  const [permissions, setPermissions] = useState<Permissions>(lo.shared.permissions)
+  const [workers, setWorkers] = useState<WorkerEntry[]>(lo.workers.length > 0 ? lo.workers : [{ name: 'agent-1', prompt: '' }, { name: 'agent-2', prompt: '' }])
 
   const totalFields = headerCount() + workers.length * 2 + 1 // +1 for submit
   const submitIdx = totalFields - 1
@@ -189,27 +187,30 @@ export function Orchestrate() {
     return (
       <Box flexDirection="column" paddingX={1}>
         <Box marginBottom={1}>
-          <Text color="green" bold>orchestrated {result.length} session{result.length !== 1 ? 's' : ''}</Text>
+          <Text color="#5a96e0" bold>REEVES AGENTS</Text>
+          <Text color="#4a6fa5">  /orchestrate · result</Text>
         </Box>
-        {result.map(s => (
-          <Box key={s.id}>
-            <Text color="#7eb8f5">{s.id}</Text>
-            <Text color="gray" dimColor>  {s.name}  </Text>
-            <Text color="gray">{s.tmux_session}:{s.tmux_window}</Text>
+        <Box flexGrow={1} flexDirection="column">
+          {result.map(s => (
+            <Box key={s.id}>
+              <Text color="#7eb8f5">{s.id}</Text>
+              <Text color="gray" dimColor>  {s.name}  </Text>
+              <Text color="gray">{s.tmux_session}:{s.tmux_window}</Text>
+            </Box>
+          ))}
+          <Box marginTop={1}>
+            <Text color="gray" dimColor>l sessions  t top  esc back</Text>
           </Box>
-        ))}
-        <Box marginTop={1}>
-          <Text color="gray" dimColor>press l to view sessions, esc to go back</Text>
-        </Box>
-        <Box flexDirection="column" marginTop={1}>
           <CommandPicker completions={completions} selectedIdx={selectedIdx} />
+        </Box>
+        <Box flexDirection="column">
+          {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
           <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
             <Text color="gray">/ </Text>
             <Text>{cmdMode ? cmdValue : ''}</Text>
             {!cmdMode && <Text color="gray" dimColor>type a command</Text>}
           </Box>
         </Box>
-        <StatusBar screen="orchestrate" />
       </Box>
     )
   }
@@ -217,44 +218,57 @@ export function Orchestrate() {
   return (
     <Box flexDirection="column" paddingX={1}>
       <Box marginBottom={1}>
-        <Text color="#5a96e0" bold>orchestrate</Text>
-        <Text color="gray" dimColor>  tab/↑↓ nav  ← → select  a add worker  x remove last</Text>
+        <Text color="#5a96e0" bold>REEVES AGENTS</Text>
+        <Text color="#4a6fa5">  /orchestrate · fan out multiple agents</Text>
       </Box>
 
-      <Box flexDirection="column" marginBottom={1}>
-        {textRow(0, 'goal', goal, '(required) what is the overall objective?')}
-        {textRow(1, 'tag', tag, '(optional) e.g. feature-branch')}
-        {selectRow(2, 'provider', PROVIDERS, provider)}
-        {selectRow(3, 'auth', AUTHS, auth)}
-        {selectRow(4, 'effort', EFFORTS, effort)}
-        {selectRow(5, 'permissions', PERMS, permissions)}
+      <Box flexGrow={1} flexDirection={panes >= 2 ? 'row' : 'column'}>
+        <Box flexDirection="column" flexGrow={1}>
+          <Box flexDirection="column" marginBottom={1}>
+            {textRow(0, 'goal', goal, '(required) what is the overall objective?')}
+            {textRow(1, 'tag', tag, '(optional) e.g. feature-branch')}
+            {selectRow(2, 'provider', PROVIDERS, provider)}
+            {selectRow(3, 'auth', AUTHS, auth)}
+            {selectRow(4, 'effort', EFFORTS, effort)}
+            {selectRow(5, 'permissions', PERMS, permissions)}
+          </Box>
+
+          <Box flexDirection="column" marginBottom={1}>
+            <Text color="gray" dimColor>WORKERS ({workers.length})  a add  x remove last</Text>
+            {workers.map((w, i) => {
+              const nameIdx = headerCount() + i * 2
+              const promptIdx = headerCount() + i * 2 + 1
+              return (
+                <Box key={i} flexDirection="column">
+                  <Text color="gray" dimColor>  worker {i + 1}</Text>
+                  {textRow(nameIdx, '    name', w.name, `agent-${i + 1}`)}
+                  {textRow(promptIdx, '    prompt', w.prompt, '(required) what should this worker do?')}
+                </Box>
+              )
+            })}
+          </Box>
+
+          {error && <Text color="red">{error}</Text>}
+
+          <Box>
+            <Text color={focusIdx === submitIdx ? '#5a96e0' : 'gray'} bold={focusIdx === submitIdx}>
+              {marker(submitIdx)} [orchestrate {workers.length} workers]
+            </Text>
+          </Box>
+
+          <CommandPicker completions={completions} selectedIdx={selectedIdx} />
+        </Box>
+
+        {panes >= 2 && (
+          <Box flexDirection="column" width={40} marginLeft={2} borderStyle="round" borderColor="#1e2d3e" paddingLeft={1} paddingRight={1}>
+            <Text color="gray" bold>AGENT {Math.floor((focusIdx - headerCount()) / 2) + 1}</Text>
+            <Text color="gray" dimColor>name + prompt define</Text>
+            <Text color="gray" dimColor>this agent's task</Text>
+          </Box>
+        )}
       </Box>
 
-      <Box flexDirection="column" marginBottom={1}>
-        <Text color="gray" dimColor>WORKERS ({workers.length})  a add  x remove last</Text>
-        {workers.map((w, i) => {
-          const nameIdx = headerCount() + i * 2
-          const promptIdx = headerCount() + i * 2 + 1
-          return (
-            <Box key={i} flexDirection="column">
-              <Text color="gray" dimColor>  worker {i + 1}</Text>
-              {textRow(nameIdx, '    name', w.name, `agent-${i + 1}`)}
-              {textRow(promptIdx, '    prompt', w.prompt, '(required) what should this worker do?')}
-            </Box>
-          )
-        })}
-      </Box>
-
-      {error && <Text color="red">{error}</Text>}
-
-      <Box>
-        <Text color={focusIdx === submitIdx ? '#5a96e0' : 'gray'} bold={focusIdx === submitIdx}>
-          {marker(submitIdx)} [orchestrate {workers.length} workers]
-        </Text>
-      </Box>
-
-      <Box flexDirection="column" marginTop={1}>
-        <CommandPicker completions={completions} selectedIdx={selectedIdx} />
+      <Box flexDirection="column">
         {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
         <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
           <Text color="gray">/ </Text>
@@ -262,8 +276,6 @@ export function Orchestrate() {
           {!cmdMode && <Text color="gray" dimColor>type a command</Text>}
         </Box>
       </Box>
-
-      <StatusBar screen="orchestrate" />
     </Box>
   )
 }
