@@ -1,3 +1,7 @@
+> **Superseded.** See `docs/superpowers/specs/2026-05-12-reevesagents-design.md` for the current unified design.
+
+---
+
 # reevesagents v3 — Sprint 3 spec
 
 Sprint 3 polish items from v3-audit-2026-05-12.md. Sprint 2 must be complete and on
@@ -380,13 +384,64 @@ Files: `src/utils/theme.ts` (new), `src/components/Banner.tsx`.
 
 ---
 
+## Doctor: tmux binding check + execSync cleanup
+
+### Binding check
+
+After `setup-tmux` shipped, doctor should verify the user has run it. Add a new check:
+
+```typescript
+function checkTmuxBinding(): CheckResult {
+  const conf = join(homedir(), '.tmux.conf')
+  try {
+    const content = readFileSync(conf, 'utf-8')
+    const bound = content.includes('# reevesagents')
+    return {
+      name: 'tmux binding',
+      status: bound ? 'ok' : 'warn',
+      detail: bound
+        ? 'Prefix+A session picker active'
+        : 'not configured — run: reevesagents setup-tmux',
+    }
+  } catch {
+    return {
+      name: 'tmux binding',
+      status: 'warn',
+      detail: 'no ~/.tmux.conf found — run: reevesagents setup-tmux',
+    }
+  }
+}
+```
+
+Add to `runDoctor()` checks array. Add `readFileSync` to the fs import.
+
+### execSync cleanup in findOrphans
+
+`findOrphans()` uses `execSync('tmux list-windows -t reevesagents -F "#{window_name}"', ...)`.
+This is safe (no user input), but inconsistent with the rest of the codebase. Replace with:
+
+```typescript
+const output = execFileSync(
+  'tmux', ['list-windows', '-t', TMUX_SESSION, '-F', '#{window_name}'],
+  { encoding: 'utf8' }
+)
+```
+
+Import `execFileSync` alongside `execSync`. After this change, `execSync` is only
+used in `checkTmux()` for `tmux -V`, which is intentional (no user input, noted in
+spec). Remove the `execSync` import once `findOrphans` is migrated.
+
+Files: `src/launcher/doctor.ts` only.
+
+---
+
 ## Execution order within Sprint 3
 
 1. G13 — Spawn progress (trivial, one file)
 2. G18 — Name field + validation (one file, small)
 3. G9 — Orchestrate attach commands (one file, small)
 4. G5 — Home 1-pane last session (one file, one block)
-5. G14 — Doctor tmux version parse (one file)
+5. G14 — Doctor tmux version parse + binding check + execSync cleanup (one file)
 6. G15 — Error boundary (two files)
 7. F7 — Goodbye messages (two files)
 8. G17 — NO_COLOR mode (two files)
@@ -400,7 +455,7 @@ Files: `src/utils/theme.ts` (new), `src/components/Banner.tsx`.
 | `src/screens/Spawn.tsx` | G13, G18 |
 | `src/screens/Orchestrate.tsx` | G9 |
 | `src/screens/Home.tsx` | G5 |
-| `src/launcher/doctor.ts` | G14 |
+| `src/launcher/doctor.ts` | G14, binding check, execSync cleanup |
 | `src/components/ErrorBoundary.tsx` | G15 (new) |
 | `src/router.tsx` | G15 |
 | `src/brand/goodbye.ts` | F7 (new) |

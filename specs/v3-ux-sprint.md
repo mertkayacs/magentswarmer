@@ -1,3 +1,7 @@
+> **Superseded.** See `docs/superpowers/specs/2026-05-12-reevesagents-design.md` for the current unified design.
+
+---
+
 # reevesagents v3 — UX sprint spec
 
 Design spec for the sprint covering CC-like feel, pane-responsive layouts, and
@@ -211,6 +215,14 @@ useEffect(() => {
 
 ### F9 — Attach from TUI
 
+**CLI-level attach is already shipped.** `reevesagents switch` (src/screens/Switch.tsx)
+is a standalone Ink session picker that calls `tmux switch-client` inside tmux or prints
+the manual attach command otherwise. `reevesagents attach [id]` does the same from the
+command line. Both are registered in cli.ts.
+
+Remaining work for this item: wire the `a` key inside the Sessions screen so users
+can attach without leaving the TUI to a shell.
+
 In Sessions.tsx, add `a` key binding in `useInput`:
 ```typescript
 if (input === 'a' && selected) {
@@ -257,20 +269,20 @@ until candidate is not in the Set. Cap at suffix 99 to prevent infinite loop.
 
 ## 4. Provider color badges (G10)
 
-Create `src/utils/display.ts`:
-```typescript
-import type { Provider } from '../state/types.js'
+**`src/utils/display.ts` is already created.** It contains:
 
-export function providerColor(p: Provider): string {
-  if (p === 'cc') return '#5a96e0'
-  if (p === 'codex') return '#4ade80'
-  if (p === 'gemini') return '#facc15'
-  return 'gray'
-}
+```typescript
+export function providerColor(p: Provider): string { ... }
+export function formatAge(isoDate: string): string { ... }
 ```
 
-Replace plain `<Text>{s.provider}</Text>` in Sessions.tsx and Home.tsx with
-`<Text color={providerColor(s.provider)}>{s.provider}</Text>`.
+`formatAge` was added at implementation time (not in original spec) and is already used
+in `src/screens/Switch.tsx`. The spec only called for `providerColor` but both helpers
+belong in this file.
+
+Remaining work: replace plain `<Text>{s.provider}</Text>` in Sessions.tsx and Home.tsx
+with `<Text color={providerColor(s.provider)}>{s.provider}</Text>`.
+Also replace the inline `age()` helper in Sessions.tsx with `formatAge` from display.ts.
 
 ---
 
@@ -280,7 +292,7 @@ Replace plain `<Text>{s.provider}</Text>` in Sessions.tsx and Home.tsx with
 |---|---|
 | `src/hooks/useScreenNav.ts` | add ROUTE_DESCRIPTIONS, DEDUPED_ROUTES, completions, selectedIdx |
 | `src/components/NavSidebar.tsx` | new — 3-pane nav sidebar |
-| `src/utils/display.ts` | new — providerColor() |
+| `src/utils/display.ts` | done — providerColor() + formatAge(); used in Switch.tsx |
 | `src/screens/Home.tsx` | 3-pane layout, recent sessions from state |
 | `src/screens/Spawn.tsx` | 2/3-pane layout, field help right panel, F5 |
 | `src/screens/Orchestrate.tsx` | 2/3-pane layout, worker preview right panel, F5 |

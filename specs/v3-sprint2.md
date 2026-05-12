@@ -1,3 +1,7 @@
+> **Superseded.** See `docs/superpowers/specs/2026-05-12-reevesagents-design.md` for the current unified design.
+
+---
+
 # reevesagents v3 — Sprint 2 spec
 
 Sprint 2 items from v3-audit-2026-05-12.md: F1 (/top screen), F12 (attach CLI),
@@ -108,7 +112,51 @@ export function Top() {
 
 ---
 
-## F12 — `reevesagents attach <id>` CLI subcommand
+## F12 — `reevesagents attach <id>` CLI subcommand — SHIPPED
+
+Already implemented in `src/cli.ts`. Implementation matches the spec below exactly:
+exact match first, then prefix match, switch-client if inside tmux, print manual
+command otherwise. No further work needed.
+
+---
+
+## reevesagents switch + setup-tmux — SHIPPED
+
+### reevesagents switch
+
+Interactive Ink session picker (`src/screens/Switch.tsx`). Arrow keys navigate, Enter
+calls `tmux switch-client -t <session>:<window>` if inside tmux, or prints the manual
+attach command as a status line otherwise. Exits cleanly via `onExit` prop.
+
+Registered in `cli.ts` as `reevesagents switch`. Also invoked by the `setup-tmux`
+binding (see below) so it runs inside a `display-popup` over whatever window is active.
+
+### reevesagents setup-tmux
+
+Writes a single block to `~/.tmux.conf` (guarded by `# reevesagents` marker):
+
+```
+bind-key A display-popup -w 90 -h 20 -E "reevesagents switch"
+```
+
+If already inside tmux, reloads the config automatically. Prefix+A then opens the
+picker as a floating overlay from anywhere in tmux.
+
+Registered in `cli.ts` as `reevesagents setup-tmux`.
+
+### Design rationale (option 3 — tmux-native)
+
+Rejected: `display-popup` only (fails outside tmux). Rejected: OS terminal spawning
+(10+ emulators, no cross-platform npm package exists, fragile).
+
+Chosen: `switch-client` inside tmux, manual command outside. Since tmux is already
+required to run agents, the contract is: run the TUI inside tmux. When you switch to
+an agent window, the TUI stays alive in its own tmux window. `Prefix+p`/`n` or
+`Prefix+[number]` navigates back.
+
+---
+
+### Original F12 spec (for reference)
 
 ### Behavior
 
