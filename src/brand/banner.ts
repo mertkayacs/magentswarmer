@@ -69,13 +69,17 @@ export interface ColoredChar {
 export function gradientChars(
   art: string = BANNER_ART,
   stops: readonly string[] = GRADIENT_STOPS,
+  direction: 'horizontal' | 'diagonal' = 'horizontal',
 ): ColoredChar[][] {
   const lines = art.split('\n')
   const width = Math.max(...lines.map(l => l.length), 1)
-  return lines.map(line =>
-    Array.from(line).map((char, i) => ({
-      char,
-      color: gradientColor(stops, i / Math.max(width - 1, 1)),
-    })),
+  const height = Math.max(lines.length, 1)
+  return lines.map((line, y) =>
+    Array.from(line).map((char, x) => {
+      const t = direction === 'diagonal'
+        ? (x / Math.max(width - 1, 1) + y / Math.max(height - 1, 1)) / 2
+        : x / Math.max(width - 1, 1)
+      return { char, color: gradientColor(stops, t) }
+    }),
   )
 }
