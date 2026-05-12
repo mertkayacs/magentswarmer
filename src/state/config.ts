@@ -62,6 +62,10 @@ export function defaultConfig(): Config {
     ui: {
       last_used_tag: null,
       last_used_goal: null
+    },
+    global: {
+      tmux_session_name: 'reevesagents',
+      peek_interval_seconds: 5
     }
   }
 }
@@ -82,6 +86,10 @@ function mergeDefaults(raw: unknown): Config {
     ui: {
       last_used_tag: null,
       last_used_goal: null
+    },
+    global: {
+      tmux_session_name: 'reevesagents',
+      peek_interval_seconds: 5
     }
   }
 
@@ -106,6 +114,17 @@ function mergeDefaults(raw: unknown): Config {
     const ui = obj.ui as Record<string, unknown>
     merged.ui.last_used_tag = (ui.last_used_tag as string | null) ?? null
     merged.ui.last_used_goal = (ui.last_used_goal as string | null) ?? null
+  }
+
+  if (typeof obj.global === 'object' && obj.global !== null) {
+    const g = obj.global as Record<string, unknown>
+    if (typeof g.tmux_session_name === 'string' && g.tmux_session_name) {
+      merged.global.tmux_session_name = g.tmux_session_name
+    }
+    const interval = g.peek_interval_seconds as number
+    if (interval === 3 || interval === 5 || interval === 10) {
+      merged.global.peek_interval_seconds = interval
+    }
   }
 
   return merged
