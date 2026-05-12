@@ -2,6 +2,8 @@
 // Inputs: function arguments. Outputs: typed return values.
 // Invariant: all exports are pure functions or constants; no side effects on import.
 
+export { ErrorBoundary } from './components/ErrorBoundary.js'
+
 export { spawn } from './launcher/spawn.js'
 export { orchestrate, fanOut } from './launcher/orchestrate.js'
 export { peek } from './launcher/peek.js'

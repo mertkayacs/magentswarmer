@@ -18,6 +18,11 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Provider, Auth, Effort, Permissions } from './state/types.js'
 
+process.on('uncaughtException', (err) => {
+  process.stderr.write(`[FATAL] ${err.message}\n`)
+  process.exit(1)
+})
+
 const GOODBYE_MESSAGES = [
   'goodbye', 'au revoir', 'auf Wiedersehen', 'hasta luego', 'arrivederci',
   'sayonara', 'annyeong', 'zai jian', 'khuda hafiz', 'vale',
