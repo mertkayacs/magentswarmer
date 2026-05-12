@@ -87,4 +87,33 @@ describe('display utilities', () => {
       expect(formatAge(future)).toMatch(/^-\d+s$/)
     })
   })
+
+  describe('formatDuration', () => {
+    it('seconds only when under 60s', async () => {
+      const { formatDuration } = await import('../src/utils/display.js')
+      const start = '2026-01-01T00:00:00.000Z'
+      const end   = '2026-01-01T00:00:42.000Z'
+      expect(formatDuration(start, end)).toBe('42s')
+    })
+
+    it('minutes and seconds when under 1h', async () => {
+      const { formatDuration } = await import('../src/utils/display.js')
+      const start = '2026-01-01T00:00:00.000Z'
+      const end   = '2026-01-01T00:23:05.000Z'
+      expect(formatDuration(start, end)).toBe('23m 5s')
+    })
+
+    it('hours and minutes when 1h or more', async () => {
+      const { formatDuration } = await import('../src/utils/display.js')
+      const start = '2026-01-01T00:00:00.000Z'
+      const end   = '2026-01-01T03:45:00.000Z'
+      expect(formatDuration(start, end)).toBe('3h 45m')
+    })
+
+    it('zero seconds returns 0s', async () => {
+      const { formatDuration } = await import('../src/utils/display.js')
+      const ts = '2026-01-01T00:00:00.000Z'
+      expect(formatDuration(ts, ts)).toBe('0s')
+    })
+  })
 })
