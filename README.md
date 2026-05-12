@@ -64,36 +64,55 @@ reevesagents doctor
 
 ## Working with sessions
 
-Every spawned session runs in a named tmux window inside the `reevesagents` tmux session.
+Every spawned session runs as a named tmux window inside the `reevesagents` tmux session. The registry tracks each session's ID, provider, name, and tmux target.
 
-**List all windows:**
+**List sessions:**
 ```sh
-tmux list-windows -t reevesagents
+reevesagents sessions          # table view
+reevesagents sessions --json   # JSON for scripting
 ```
 
-**Attach to a session by window name:**
+**Attach by session ID:**
 ```sh
-# From outside tmux
-tmux attach -t reevesagents && tmux select-window -t reevesagents:<window-name>
-
-# Already inside tmux
-tmux switch-client -t reevesagents:<window-name>
+reevesagents attach <id>       # exact or prefix match, switches tmux client
+reevesagents attach            # no ID: opens tmux window picker for reevesagents session
 ```
 
-The window name is the session tag if you set one, otherwise `<provider>-<id>`. The TUI Sessions screen (`/sessions`) shows all names and IDs.
+**From inside tmux — see everything:**
+
+Press `Ctrl+b s` to open tmux's built-in session tree. Shows all sessions and windows. Arrow keys to navigate, Enter to switch, `q` to cancel.
 
 **Detach and return:**
 
-`Ctrl+b d` — detaches from tmux and drops you back to your shell. The session keeps running.
+`Ctrl+b d` — detaches and drops you back. The session keeps running.
 
 **Peek without attaching:**
 ```sh
-reevesagents peek <session-id>
+reevesagents peek <id>         # last 20 lines of the session's pane output
+```
+
+**Power user: fzf popup picker**
+
+Add this to `~/.tmux.conf` to bind `Prefix+A` to a reevesagents session picker from anywhere in tmux:
+
+```sh
+bind-key A display-popup -w 90 -h 20 -E \
+  "reevesagents sessions 2>/dev/null \
+   | fzf --header 'select a session (enter to attach, esc to cancel)' \
+   | awk '{print \$1}' \
+   | xargs -I ID reevesagents attach ID"
+```
+
+Requires [fzf](https://github.com/junegunn/fzf) (`brew install fzf`) and tmux 3.2+.
+
+After editing `~/.tmux.conf`, reload with:
+```sh
+tmux source-file ~/.tmux.conf
 ```
 
 **Remote control (mobile):**
 
-Inside any session, type `/remote-control`. A URL appears — open it on your phone to control the session from claude.ai.
+Inside any session, type `/remote-control`. A URL appears — open it on your phone to drive the session from claude.ai.
 
 ---
 

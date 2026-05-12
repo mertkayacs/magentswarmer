@@ -85,6 +85,55 @@ program
   })
 
 program
+  .command('attach [id]')
+  .description('attach to a session by ID (or ID prefix). No ID: opens tmux window picker')
+  .action((id?: string) => {
+    if (!id) {
+      if (!process.env.TMUX) {
+        console.log(`not inside tmux — run:`)
+        console.log(`  tmux attach -t reevesagents`)
+        console.log(`  tmux switch-client -t reevesagents:<window-name>`)
+        process.exit(0)
+      }
+      try {
+        execFileSync('tmux', ['choose-window', '-t', 'reevesagents'], { stdio: 'inherit' })
+      } catch {
+        console.error(`no tmux session 'reevesagents' found — spawn a session first`)
+        process.exit(1)
+      }
+      return
+    }
+
+    const sessions = listSessions()
+    let session = sessions.find(s => s.id === id)
+    if (!session) {
+      const matches = sessions.filter(s => s.id.startsWith(id))
+      if (matches.length === 0) {
+        console.error(`session ${id} not found`)
+        process.exit(1)
+      }
+      if (matches.length > 1) {
+        console.error(`ambiguous — matches: ${matches.map(s => s.id).join(', ')}`)
+        process.exit(1)
+      }
+      session = matches[0]!
+    }
+
+    const target = `${session.tmux_session}:${session.tmux_window}`
+    if (process.env.TMUX) {
+      try {
+        execFileSync('tmux', ['switch-client', '-t', target], { stdio: 'ignore' })
+        return
+      } catch { /* fall through to print */ }
+    }
+    console.log(`tmux attach -t ${session.tmux_session}`)
+    console.log(`# then switch to window:`)
+    console.log(`tmux select-window -t ${target}`)
+    console.log(`# or if already inside tmux:`)
+    console.log(`tmux switch-client -t ${target}`)
+  })
+
+program
   .command('kill <id>')
   .description('kill a session and remove it from registry')
   .action((id) => {
