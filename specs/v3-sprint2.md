@@ -273,3 +273,64 @@ if (presetMode) {
 
 Render presets in the PRESETS section. When `presetMode`, highlight `presetIdx` row
 in blue. Show `p` shortcut in the SHORTCUTS block (only when presets exist).
+
+---
+
+## RC1 — Remote control URL surfacing (bonus sprint 2 item)
+
+### What
+
+When spawning an agent, optionally send `/remote-control` after startup so the user
+gets a mobile-accessible URL without manual steps. Surface the URL in the spawn
+success view and Sessions screen.
+
+### Why
+
+Current flow: spawn → tmux attach → type /remote-control → copy URL.
+Target flow: tick "remote control" in spawn form → URL appears in success view.
+
+### SpawnRequest change
+
+Add optional field to `SpawnFormState` and `SpawnRequest`:
+```typescript
+remote_control?: boolean
+```
+
+### spawn.ts change
+
+After the `start_prompt` setTimeout block, add a second delayed send-keys:
+```typescript
+if (req.remote_control) {
+  const rcTarget = `${TMUX_SESSION}:${name}`
+  setTimeout(() => {
+    try {
+      execFileSync('tmux', ['send-keys', '-t', rcTarget, '/remote-control', 'Enter'],
+        { stdio: 'ignore' })
+    } catch { /* window may be gone */ }
+  }, INITIAL_PROMPT_DELAY_MS + 3000)  // extra 3s after start_prompt
+}
+```
+
+### URL extraction (best-effort)
+
+After another 6s, peek the pane and extract the URL:
+```typescript
+setTimeout(() => {
+  const output = peek(sessionId, 30)
+  const match = output.match(/https:\/\/claude\.ai\/code\/session_\S+/)
+  if (match) {
+    // store URL on the Session object or print to a side-channel file
+    // for now: write to ~/.reeves/sessions/<id>.rc-url
+  }
+}, INITIAL_PROMPT_DELAY_MS + 9000)
+```
+
+Surface in Spawn success view and Sessions screen as a `<Text color="#5a96e0">{url}</Text>` row.
+
+### Sessions.tsx addition
+
+When a session has a `.rc-url` sidecar file, show it in the peek panel and in the
+2-pane detail view. `c` key copies it to clipboard via `pbcopy` (macOS) or `xclip`.
+
+Files: `src/state/types.ts`, `src/launcher/spawn.ts`, `src/screens/Spawn.tsx`,
+`src/screens/Sessions.tsx`.
