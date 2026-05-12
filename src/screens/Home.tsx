@@ -40,11 +40,22 @@ export function Home() {
   const [providers, setProviders] = useState<Record<Provider, boolean>>({ cc: false, codex: false, gemini: false })
   const [presets, setPresets] = useState<Preset[]>([])
   const [presetIdx, setPresetIdx] = useState<number | null>(null)
+  const [recentSession, setRecentSession] = useState<Session | null>(null)
 
   useEffect(() => {
     setSessions(listSessions().filter(s => s.ended_at === null))
     setProviders(detectAvailable())
-    setPresets(loadState().presets)
+    const appState = loadState()
+    setPresets(appState.presets)
+    if (appState.recent_sessions.length > 0) {
+      const sessionId = appState.recent_sessions[0]
+      try {
+        const found = readSession(sessionId)
+        setRecentSession(found)
+      } catch {
+        // session file might not exist
+      }
+    }
   }, [])
 
   const titleStr = useMemo(() => {
@@ -101,15 +112,26 @@ export function Home() {
   return (
     <Box flexDirection="column" paddingX={1}>
       {/* Zone 1 */}
-      <Box marginBottom={1}>
-        <Text>{titleStr}</Text>
-        <Text color="gray" dimColor>  </Text>
-        {(['cc', 'codex', 'gemini'] as Provider[]).map(p => (
-          <Text key={p} color={providers[p] ? providerColor(p) : '#30363d'}>
-            {providers[p] ? '●' : '○'}{p}{'  '}
-          </Text>
-        ))}
-        <Text color="gray" dimColor>{sessions.length} session{sessions.length !== 1 ? 's' : ''}</Text>
+      <Box marginBottom={1} flexDirection="column">
+        <Box>
+          <Text>{titleStr}</Text>
+          <Text color="gray" dimColor>  </Text>
+          {(['cc', 'codex', 'gemini'] as Provider[]).map(p => (
+            <Text key={p} color={providers[p] ? providerColor(p) : '#30363d'}>
+              {providers[p] ? '●' : '○'}{p}{'  '}
+            </Text>
+          ))}
+          <Text color="gray" dimColor>{sessions.length} session{sessions.length !== 1 ? 's' : ''}</Text>
+        </Box>
+        {recentSession && (
+          <Box>
+            <Text color="gray" dimColor>  </Text>
+            <Text color="gray" dimColor>{recentSession.id}</Text>
+            <Text color="gray" dimColor>  •  </Text>
+            <Text color={providerColor(recentSession.provider)}>●</Text>
+            <Text color="gray" dimColor>  {(recentSession.tag ?? recentSession.name).slice(0, 24)}</Text>
+          </Box>
+        )}
       </Box>
 
       {/* Zone 2 */}
