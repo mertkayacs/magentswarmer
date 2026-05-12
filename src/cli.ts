@@ -8,7 +8,6 @@ import { Command } from 'commander'
 import { Router } from './router.js'
 import { Switch } from './screens/Switch.js'
 import { spawn } from './launcher/spawn.js'
-import { orchestrate } from './launcher/orchestrate.js'
 import { peek } from './launcher/peek.js'
 import { runDoctor, pruneOrphans } from './launcher/doctor.js'
 import { listAll as listSessions, remove as removeSession } from './state/registry.js'
@@ -18,6 +17,24 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type { Provider, Auth, Effort, Permissions } from './state/types.js'
+
+const GOODBYE_MESSAGES = [
+  'goodbye', 'au revoir', 'auf Wiedersehen', 'hasta luego', 'arrivederci',
+  'sayonara', 'annyeong', 'zai jian', 'khuda hafiz', 'vale',
+  'adieu', 'do svidaniya', 'tchau', 'tot ziens', 'farvel',
+  'hej da', 'nakupenda', 'aloha', 'ciao', 'shukran',
+  'namaste', 'mersi', 'dag', 'czesc', 'pa pa',
+  'yasas', 'güle güle', 'slaan well', 'do pobachennya', 'kwa heri',
+]
+
+let goodbyePrinted = false
+
+function printGoodbye(): void {
+  if (goodbyePrinted) return
+  goodbyePrinted = true
+  const msg = GOODBYE_MESSAGES[Math.floor(Math.random() * GOODBYE_MESSAGES.length)]
+  process.stderr.write(msg + '\n')
+}
 
 const program = new Command()
 
@@ -238,3 +255,5 @@ if (!firstArg || (!knownSubcommands.has(firstArg) && !firstArg.startsWith('--'))
 } else {
   program.parse()
 }
+
+process.on('exit', printGoodbye)
