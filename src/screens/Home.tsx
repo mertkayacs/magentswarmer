@@ -13,10 +13,11 @@ import { CommandPicker } from '../components/CommandPicker.js'
 import { NavSidebar } from '../components/NavSidebar.js'
 import { detectAvailable } from '../launcher/providers.js'
 import { listAll as listSessions, read as readSession } from '../state/registry.js'
-import { loadState } from '../state/store.js'
+import { loadState, removePreset } from '../state/store.js'
+import { orchestrate } from '../launcher/orchestrate.js'
 import { providerColor } from '../utils/display.js'
 import { gradientChars, GRADIENT_STOPS } from '../brand/banner.js'
-import type { Provider, Session } from '../state/types.js'
+import type { Provider, Session, Preset } from '../state/types.js'
 
 function groupByDir(sessions: Session[]): Array<[string, Session[]]> {
   const home = homedir()
@@ -37,10 +38,13 @@ export function Home() {
   const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = useScreenNav(push, pop)
   const [sessions, setSessions] = useState<Session[]>([])
   const [providers, setProviders] = useState<Record<Provider, boolean>>({ cc: false, codex: false, gemini: false })
+  const [presets, setPresets] = useState<Preset[]>([])
+  const [presetIdx, setPresetIdx] = useState<number | null>(null)
 
   useEffect(() => {
     setSessions(listSessions().filter(s => s.ended_at === null))
     setProviders(detectAvailable())
+    setPresets(loadState().presets)
   }, [])
 
   const titleStr = useMemo(() => {
@@ -64,9 +68,31 @@ export function Home() {
     if (input === 't') { push('Top'); return }
     if (input === 'd') { push('Doctor'); return }
     if (input === 'h' || input === '?') { push('Help'); return }
+
+    const presetNum = parseInt(input, 10)
+    if (!isNaN(presetNum) && presetNum >= 1 && presetNum <= 9 && presets[presetNum - 1]) {
+      const preset = presets[presetNum - 1]
+      try {
+        orchestrate(preset.goal, '', preset.shared, preset.workers)
+        setSessions(listSessions().filter(s => s.ended_at === null))
+      } catch {
+        // orchestrate failed
+      }
+      return
+    }
+
+    if (input === 'D' && presetIdx !== null && presets[presetIdx]) {
+      const name = presets[presetIdx].name
+      removePreset(name)
+      setPresets(prev => prev.filter((_, i) => i !== presetIdx))
+      setPresetIdx(null)
+      return
+    }
+
     if (input === 'r') {
       setSessions(listSessions().filter(s => s.ended_at === null))
       setProviders(detectAvailable())
+      setPresets(loadState().presets)
     }
   }, { isActive: !cmdMode })
 
@@ -111,16 +137,17 @@ export function Home() {
           )}
 
           {/* Presets section */}
-          {state.presets.length > 0 && (
+          {presets.length > 0 && (
             <Box flexDirection="column" marginTop={1}>
               <Text color="#4a6fa5">{'── PRESETS ' + '─'.repeat(Math.max(0, dashLen + 1))}</Text>
-              {state.presets.map((p, i) => (
+              {presets.slice(0, 9).map((p, i) => (
                 <Box key={p.name}>
-                  <Text color="#7eb8f5">  {i + 1}</Text>
-                  <Text color="gray" dimColor>  {p.name.padEnd(20)}</Text>
+                  <Text color={presetIdx === i ? '#5a96e0' : '#7eb8f5'}>  {i + 1}</Text>
+                  <Text color={presetIdx === i ? '#7eb8f5' : 'gray'} dimColor={presetIdx !== i}>  {p.name.padEnd(20)}</Text>
                   <Text color="gray" dimColor>{p.workers.length} workers</Text>
                 </Box>
               ))}
+              {presets.length > 9 && <Text color="gray" dimColor>  +{presets.length - 9} more</Text>}
             </Box>
           )}
 

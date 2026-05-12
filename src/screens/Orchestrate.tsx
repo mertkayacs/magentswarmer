@@ -10,8 +10,8 @@ import { usePanes } from '../hooks/usePanes.js'
 import { CommandPicker } from '../components/CommandPicker.js'
 import { FieldHint } from '../components/FieldHint.js'
 import { orchestrate } from '../launcher/orchestrate.js'
-import { loadState } from '../state/store.js'
-import type { Provider, Auth, Effort, Permissions, Session, WorkerEntry } from '../state/types.js'
+import { loadState, addPreset } from '../state/store.js'
+import type { Provider, Auth, Effort, Permissions, Session, WorkerEntry, SharedFormState } from '../state/types.js'
 
 const PROVIDERS: Provider[] = ['cc', 'codex', 'gemini']
 const AUTHS: Auth[] = ['subscription', 'api-key', 'custom']
@@ -36,6 +36,8 @@ export function Orchestrate() {
   const [editing, setEditing] = useState(false)
   const [result, setResult] = useState<Session[] | null>(null)
   const [error, setError] = useState('')
+  const [savePanel, setSavePanel] = useState(false)
+  const [presetName, setPresetName] = useState('')
 
   const lo = loadState().last_orchestrate
   const [goal, setGoal] = useState(lo.goal)
@@ -56,7 +58,7 @@ export function Orchestrate() {
     return false
   }
 
-  const fieldFocused = editing && isTextField(focusIdx)
+  const fieldFocused = (editing && isTextField(focusIdx)) || savePanel
   const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = useScreenNav(push, pop, fieldFocused)
 
   function workerIdx(fieldIdx: number): number {
@@ -66,6 +68,31 @@ export function Orchestrate() {
   function workerSubField(fieldIdx: number): 'name' | 'prompt' {
     return (fieldIdx - headerCount()) % 2 === 0 ? 'name' : 'prompt'
   }
+
+  // Save panel text input handler
+  useInput((input, key) => {
+    if (key.escape) {
+      setSavePanel(false)
+      setPresetName('')
+      return
+    }
+    if (key.return) {
+      if (presetName.trim()) {
+        const shared: SharedFormState = { provider, auth, model: null, permissions, effort }
+        addPreset(presetName, goal, workers, shared)
+        setSavePanel(false)
+        setPresetName('')
+      }
+      return
+    }
+    if (key.backspace || key.delete) {
+      setPresetName(v => v.slice(0, -1))
+      return
+    }
+    if (!key.ctrl && !key.meta) {
+      setPresetName(v => v + input)
+    }
+  }, { isActive: savePanel && !!result })
 
   // Text input handler
   useInput((input, key) => {
@@ -98,6 +125,16 @@ export function Orchestrate() {
 
   // Navigation handler
   useInput((input, key) => {
+    if (key.tab && result !== null) {
+      if (!savePanel) {
+        setSavePanel(true)
+        setPresetName(goal.slice(0, 20))
+      } else {
+        setSavePanel(false)
+        setPresetName('')
+      }
+      return
+    }
     if (key.tab || key.downArrow) { setFocusIdx(i => Math.min(submitIdx, i + 1)); return }
     if (key.upArrow) { setFocusIdx(i => Math.max(0, i - 1)); return }
     if (key.leftArrow) {
@@ -198,9 +235,20 @@ export function Orchestrate() {
               <Text color="gray">{s.tmux_session}:{s.tmux_window}</Text>
             </Box>
           ))}
-          <Box marginTop={1}>
-            <Text color="gray" dimColor>l sessions  t top  esc back</Text>
-          </Box>
+          {!savePanel ? (
+            <Box marginTop={1}>
+              <Text color="gray" dimColor>l sessions  t top  tab save preset  esc back</Text>
+            </Box>
+          ) : (
+            <Box flexDirection="column" marginTop={1} borderStyle="round" borderColor="#5a96e0" paddingX={1}>
+              <Text color="#5a96e0" bold>SAVE AS PRESET</Text>
+              <Box>
+                <Text color="gray">name  </Text>
+                <Text>{presetName}<Text color="#5a96e0">█</Text></Text>
+              </Box>
+              <Text color="gray" dimColor>enter to save  esc to cancel</Text>
+            </Box>
+          )}
           <CommandPicker completions={completions} selectedIdx={selectedIdx} />
         </Box>
         <Box flexDirection="column">

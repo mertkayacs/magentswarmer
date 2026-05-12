@@ -157,13 +157,23 @@ function mergeDefaults(raw: unknown): AppState {
           }
           return { name: '', prompt: '' }
         }) : []
+        const shared = typeof pr.shared === 'object' && pr.shared !== null
+          ? {
+            provider: ((pr.shared as Record<string, unknown>).provider as Provider) || defaults.last_orchestrate.shared.provider,
+            auth: ((pr.shared as Record<string, unknown>).auth as Auth) || defaults.last_orchestrate.shared.auth,
+            model: ((pr.shared as Record<string, unknown>).model as string | null) ?? defaults.last_orchestrate.shared.model,
+            permissions: ((pr.shared as Record<string, unknown>).permissions as Permissions) || defaults.last_orchestrate.shared.permissions,
+            effort: ((pr.shared as Record<string, unknown>).effort as Effort | null) ?? defaults.last_orchestrate.shared.effort
+          }
+          : defaultSharedFormState()
         return {
           name: (pr.name as string) || '',
           goal: (pr.goal as string) || '',
-          workers
+          workers,
+          shared
         }
       }
-      return { name: '', goal: '', workers: [] }
+      return { name: '', goal: '', workers: [], shared: defaultSharedFormState() }
     })
   }
 
@@ -250,14 +260,14 @@ export function addRecentSession(sessionId: string): void {
   saveState(state)
 }
 
-export function addPreset(name: string, goal: string, workers: WorkerEntry[]): void {
+export function addPreset(name: string, goal: string, workers: WorkerEntry[], shared: SharedFormState): void {
   const state = loadState()
 
   // Upsert by name
   const idx = state.presets.findIndex(p => p.name === name)
 
   const capped = workers.slice(0, MAX_WORKERS)
-  const preset: Preset = { name, goal, workers: capped }
+  const preset: Preset = { name, goal, workers: capped, shared }
 
   if (idx >= 0) {
     state.presets[idx] = preset

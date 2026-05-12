@@ -78,6 +78,7 @@ export interface Preset {
   name: string
   goal: string
   workers: WorkerEntry[]
+  shared: SharedFormState
 }
 
 export interface AppState {
