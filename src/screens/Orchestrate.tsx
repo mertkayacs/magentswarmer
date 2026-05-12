@@ -9,6 +9,7 @@ import { useScreenNav } from '../hooks/useScreenNav.js'
 import { usePanes } from '../hooks/usePanes.js'
 import { CommandPicker } from '../components/CommandPicker.js'
 import { FieldHint } from '../components/FieldHint.js'
+import { providerColor } from '../utils/display.js'
 import { orchestrate } from '../launcher/orchestrate.js'
 import { loadState, addPreset } from '../state/store.js'
 import type { Provider, Auth, Effort, Permissions, Session, WorkerEntry, SharedFormState } from '../state/types.js'
@@ -229,11 +230,16 @@ export function Orchestrate() {
         </Box>
         <Box flexGrow={1} flexDirection="column">
           {result.map(s => (
-            <Box key={s.id}>
-              <Text color="#7eb8f5">{s.id}</Text>
-              <Text color="gray" dimColor>  {s.name}  </Text>
-              <Text color="gray">{s.tmux_session}:{s.tmux_window}</Text>
-            </Box>
+            <React.Fragment key={s.id}>
+              <Box>
+                <Text color="#7eb8f5">{s.id}</Text>
+                <Text color="gray" dimColor>  {s.name}  </Text>
+                <Text color={providerColor(s.provider)}>{s.provider}</Text>
+              </Box>
+              <Box>
+                <Text color="gray" dimColor>  tmux switch-client -t {s.tmux_session}:{s.tmux_window}</Text>
+              </Box>
+            </React.Fragment>
           ))}
           {!savePanel ? (
             <Box marginTop={1}>
