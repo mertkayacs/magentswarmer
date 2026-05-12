@@ -107,12 +107,6 @@ export function write(session: Session): string {
   return path
 }
 
-// Aliases used by spawn.ts, peek.ts, doctor.ts
-export const writeSession = write
-export const readSession = read
-export const listSessions = listAll
-export const removeSession = remove
-
 export function read(sessionId: string): Session {
   const path = join(registryDir(), `${sessionId}.json`)
   const content = readFileSync(path, 'utf-8')

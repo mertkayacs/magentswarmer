@@ -9,7 +9,7 @@ import { accessSync, constants } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { CheckResult } from '../state/types.js'
-import { detectAvailable, BIN } from './providers.js'
+import { detectAvailable } from './providers.js'
 import { registryDir, listAll as listSessions, remove as removeSession } from '../state/registry.js'
 
 export interface DoctorResult {

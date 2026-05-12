@@ -1,7 +1,7 @@
 // Build CLI commands and environment for spawning providers (cc, codex, gemini).
 // Manages auth modes (subscription, api-key, custom), base URLs, model/effort args.
 
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import type { Provider, SpawnConfig } from '../state/types.js'
 
 export const DEFAULT_KEY_VAR: Record<Provider, string> = {
@@ -130,7 +130,7 @@ export function detectAvailable(): Record<Provider, boolean> {
     const bin = BIN[provider]
 
     try {
-      execSync(`which ${bin}`, { stdio: 'pipe' })
+      execFileSync('which', [bin], { stdio: 'pipe' })
       result[provider] = true
     } catch {
       result[provider] = false

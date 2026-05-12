@@ -4,7 +4,7 @@
 // Invariant: every session has a unique id and corresponding tmux window.
 
 import { execFileSync } from 'node:child_process'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { SpawnRequest, Session } from '../state/types.js'
@@ -18,6 +18,30 @@ export const TMUX_SESSION = 'reevesagents'
 // The provider CLI needs time to start up and render its initial UI.
 // Override with REEVES_INITIAL_PROMPT_DELAY_MS env var on slow machines.
 const INITIAL_PROMPT_DELAY_MS = parseInt(process.env.REEVES_INITIAL_PROMPT_DELAY_MS ?? '1500', 10)
+
+function shellQuote(s: string): string {
+  return `'${s.replace(/'/g, "'\\''")}'`
+}
+
+function buildStartScript(
+  builtEnv: Record<string, string>,
+  baseEnv: Record<string, string>,
+  cmd: string[]
+): string {
+  const lines: string[] = ['#!/usr/bin/env bash']
+  for (const key of Object.keys(baseEnv)) {
+    if (!(key in builtEnv)) {
+      lines.push(`unset ${key}`)
+    }
+  }
+  for (const [key, value] of Object.entries(builtEnv)) {
+    if (baseEnv[key] !== value) {
+      lines.push(`export ${key}=${shellQuote(value)}`)
+    }
+  }
+  lines.push(`exec ${cmd.map(shellQuote).join(' ')}`)
+  return lines.join('\n') + '\n'
+}
 
 export function spawn(req: SpawnRequest): Session {
   const available = detectAvailable()
@@ -61,8 +85,10 @@ export function spawn(req: SpawnRequest): Session {
     stdio: 'ignore',
   })
 
-  // Send the provider CLI command to the window
-  execFileSync('tmux', ['send-keys', '-t', `${TMUX_SESSION}:${name}`, cmd.join(' '), 'Enter'], {
+  // Write startup script with correct env and exec into provider CLI
+  const scriptPath = join(workdir, '.start.sh')
+  writeFileSync(scriptPath, buildStartScript(env, process.env as Record<string, string>, cmd), { mode: 0o755 })
+  execFileSync('tmux', ['send-keys', '-t', `${TMUX_SESSION}:${name}`, `bash ${shellQuote(scriptPath)}`, 'Enter'], {
     stdio: 'ignore',
   })
 

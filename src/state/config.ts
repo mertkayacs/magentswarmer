@@ -147,13 +147,3 @@ export function getProvider(name: string, cfg?: Config): ProviderConfig {
   }
   throw new Error(`Unknown provider: ${name}`)
 }
-
-export function updateUi(key: string, value: unknown): void {
-  const cfg = loadConfig()
-  if (key === 'last_used_tag') {
-    cfg.ui.last_used_tag = value as string | null
-  } else if (key === 'last_used_goal') {
-    cfg.ui.last_used_goal = value as string | null
-  }
-  saveConfig(cfg)
-}

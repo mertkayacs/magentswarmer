@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
 import { StatusBar } from '../components/StatusBar.js'
@@ -64,8 +64,8 @@ export function Sessions() {
     if (input === 'k' && selected && !killing) {
       setKilling(true)
       try {
-        execSync(
-          `tmux kill-window -t ${selected.tmux_session}:${selected.tmux_window}`,
+        execFileSync(
+          'tmux', ['kill-window', '-t', `${selected.tmux_session}:${selected.tmux_window}`],
           { stdio: 'ignore' }
         )
       } catch {
