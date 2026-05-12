@@ -130,6 +130,9 @@ export function spawn(req: SpawnRequest): Session {
     tmux_window: name,
     created_at: now,
     last_seen_at: now,
+    working_dir: null,
+    ended_at: null,
+    rc_url: null,
   }
 
   writeSession(session)
