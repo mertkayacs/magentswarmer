@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
+import { CommandPicker } from '../components/CommandPicker.js'
 import { StatusBar } from '../components/StatusBar.js'
 import { runDoctor, pruneOrphans } from '../launcher/doctor.js'
 import type { DoctorResult } from '../launcher/doctor.js'
@@ -25,7 +26,7 @@ function statusColor(status: 'ok' | 'warn' | 'fail'): string {
 
 export function Doctor() {
   const { push, pop } = useRouter()
-  const { cmdMode, cmdValue, cmdError } = useScreenNav(push, pop)
+  const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = useScreenNav(push, pop)
   const [result, setResult] = useState<DoctorResult | null>(null)
   const [pruned, setPruned] = useState(false)
 
@@ -94,6 +95,7 @@ export function Doctor() {
       )}
 
       <Box flexDirection="column" marginTop={1}>
+        <CommandPicker completions={completions} selectedIdx={selectedIdx} />
         {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
         <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
           <Text color="gray">/ </Text>

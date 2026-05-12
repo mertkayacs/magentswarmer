@@ -7,6 +7,7 @@ import { Box, Text, useInput } from 'ink'
 import { execFileSync } from 'node:child_process'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
+import { CommandPicker } from '../components/CommandPicker.js'
 import { StatusBar } from '../components/StatusBar.js'
 import { usePanes } from '../hooks/usePanes.js'
 import { listAll as listSessions, remove as removeSession } from '../state/registry.js'
@@ -27,7 +28,7 @@ function age(isoDate: string): string {
 export function Sessions() {
   const { push, pop } = useRouter()
   const panes = usePanes()
-  const { cmdMode, cmdValue, cmdError } = useScreenNav(push, pop)
+  const { cmdMode, cmdValue, cmdError, completions, selectedIdx: cmdPickerIdx } = useScreenNav(push, pop)
   const [sessions, setSessions] = useState<Session[]>([])
   const [selectedIdx, setSelectedIdx] = useState(0)
   const [peekContent, setPeekContent] = useState<string | null>(null)
@@ -130,6 +131,7 @@ export function Sessions() {
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
+        <CommandPicker completions={completions} selectedIdx={cmdPickerIdx} />
         {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
         <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
           <Text color="gray">/ </Text>

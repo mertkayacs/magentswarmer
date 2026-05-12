@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
+import { CommandPicker } from '../components/CommandPicker.js'
 import { StatusBar } from '../components/StatusBar.js'
 import { FieldHint } from '../components/FieldHint.js'
 import { loadConfig, saveConfig } from '../state/config.js'
@@ -37,7 +38,7 @@ export function Settings() {
   const isTextField = [1, 3, 5].includes(focusIdx)
   const fieldFocused = editing && isTextField
 
-  const { cmdMode, cmdValue, cmdError } = useScreenNav(push, pop, fieldFocused)
+  const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = useScreenNav(push, pop, fieldFocused)
 
   useEffect(() => {
     const cfg = loadConfig()
@@ -177,6 +178,7 @@ export function Settings() {
       </Box>
 
       <Box flexDirection="column" marginTop={1}>
+        <CommandPicker completions={completions} selectedIdx={selectedIdx} />
         {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
         <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
           <Text color="gray">/ </Text>
