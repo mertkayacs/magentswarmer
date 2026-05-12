@@ -11,6 +11,8 @@ export type ScreenName =
   | 'Spawn'
   | 'Orchestrate'
   | 'Sessions'
+  | 'Top'
+  | 'History'
   | 'Settings'
   | 'Doctor'
   | 'Help'
@@ -49,6 +51,7 @@ export interface SpawnFormState {
   tag: string | null
   name: string | null
   prompt: string
+  working_dir: string
 }
 
 export interface SharedFormState {
@@ -108,6 +111,9 @@ export interface Session {
   tmux_window: string
   created_at: string
   last_seen_at: string
+  working_dir: string | null
+  ended_at: string | null
+  rc_url: string | null
 }
 
 // Spawn request to launcher
@@ -124,6 +130,8 @@ export interface SpawnRequest {
   tag?: string | null
   start_prompt?: string | null
   goal?: string | null
+  working_dir?: string
+  remote_control?: boolean
 }
 
 // Internal config passed to command/env builder
