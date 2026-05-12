@@ -62,6 +62,41 @@ reevesagents doctor
 
 ---
 
+## Working with sessions
+
+Every spawned session runs in a named tmux window inside the `reevesagents` tmux session.
+
+**List all windows:**
+```sh
+tmux list-windows -t reevesagents
+```
+
+**Attach to a session by window name:**
+```sh
+# From outside tmux
+tmux attach -t reevesagents && tmux select-window -t reevesagents:<window-name>
+
+# Already inside tmux
+tmux switch-client -t reevesagents:<window-name>
+```
+
+The window name is the session tag if you set one, otherwise `<provider>-<id>`. The TUI Sessions screen (`/sessions`) shows all names and IDs.
+
+**Detach and return:**
+
+`Ctrl+b d` — detaches from tmux and drops you back to your shell. The session keeps running.
+
+**Peek without attaching:**
+```sh
+reevesagents peek <session-id>
+```
+
+**Remote control (mobile):**
+
+Inside any session, type `/remote-control`. A URL appears — open it on your phone to control the session from claude.ai.
+
+---
+
 ## TUI navigation
 
 Inside the TUI, type `/` to open command mode:
