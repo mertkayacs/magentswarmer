@@ -12,3 +12,4 @@ coverage/
 *.tmp
 .env
 *.tgz
+.superpowers/
