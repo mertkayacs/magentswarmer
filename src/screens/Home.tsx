@@ -10,6 +10,7 @@ import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
 import { usePanes } from '../hooks/usePanes.js'
 import { CommandPicker } from '../components/CommandPicker.js'
+import { NavSidebar } from '../components/NavSidebar.js'
 import { detectAvailable } from '../launcher/providers.js'
 import { listAll as listSessions, read as readSession } from '../state/registry.js'
 import { loadState } from '../state/store.js'
@@ -87,6 +88,7 @@ export function Home() {
 
       {/* Zone 2 */}
       <Box flexGrow={1} flexDirection={panes >= 2 ? 'row' : 'column'}>
+        {panes === 3 && <NavSidebar panes={panes} currentScreen="Home" />}
         <Box flexDirection="column" flexGrow={1}>
           {/* Sessions section */}
           <Text color="#4a6fa5">{'── SESSIONS ' + '─'.repeat(dashLen)}</Text>
