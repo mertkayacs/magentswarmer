@@ -5,6 +5,7 @@
 
 import type { SpawnRequest, Session, SharedFormState, WorkerEntry } from '../state/types.js'
 import { spawn } from './spawn.js'
+import { setLastOrchestrate } from '../state/store.js'
 
 export function fanOut(requests: SpawnRequest[]): Session[] {
   const sessions: Session[] = []
@@ -35,5 +36,7 @@ export function orchestrate(
     tag
   }))
 
-  return fanOut(requests)
+  const sessions = fanOut(requests)
+  setLastOrchestrate({ goal, tag, shared, workers })
+  return sessions
 }

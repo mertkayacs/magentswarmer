@@ -12,7 +12,7 @@ import { peek } from './launcher/peek.js'
 import { runDoctor, pruneOrphans } from './launcher/doctor.js'
 import { listAll as listSessions, remove as removeSession } from './state/registry.js'
 import { loadConfig } from './state/config.js'
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import type { Provider, Auth, Effort, Permissions } from './state/types.js'
 
 const program = new Command()
@@ -95,7 +95,7 @@ program
       process.exit(1)
     }
     try {
-      execSync(`tmux kill-window -t ${session.tmux_session}:${session.tmux_window}`, { stdio: 'ignore' })
+      execFileSync('tmux', ['kill-window', '-t', `${session.tmux_session}:${session.tmux_window}`], { stdio: 'ignore' })
     } catch {
       // window may already be gone
     }
