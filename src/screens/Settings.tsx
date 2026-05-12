@@ -6,8 +6,8 @@ import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
+import { usePanes } from '../hooks/usePanes.js'
 import { CommandPicker } from '../components/CommandPicker.js'
-import { StatusBar } from '../components/StatusBar.js'
 import { FieldHint } from '../components/FieldHint.js'
 import { loadConfig, saveConfig } from '../state/config.js'
 import type { Auth } from '../state/types.js'
@@ -24,6 +24,7 @@ function cycleAuth(current: Auth, dir: 1 | -1): Auth {
 
 export function Settings() {
   const { push, pop } = useRouter()
+  const panes = usePanes()
   const [focusIdx, setFocusIdx] = useState(0)
   const [editing, setEditing] = useState(false)
   const [saved, setSaved] = useState(false)
@@ -146,39 +147,68 @@ export function Settings() {
     )
   }
 
+  const cfg = loadConfig()
+
   return (
     <Box flexDirection="column" paddingX={1}>
       <Box marginBottom={1}>
-        <Text color="#5a96e0" bold>settings</Text>
+        <Text color="#5a96e0" bold>REEVES AGENTS</Text>
+        <Text color="#4a6fa5">  /settings · provider configuration</Text>
       </Box>
 
-      <Box flexDirection="column" marginBottom={1}>
-        <Text color="gray" dimColor>CC (claude)</Text>
-        {selectRow(0, 'auth', AUTHS, ccAuth)}
-        {textRow(1, 'key env', ccKeyEnv, 'ANTHROPIC_API_KEY')}
+      <Box flexGrow={1} flexDirection={panes >= 2 ? 'row' : 'column'}>
+        <Box flexDirection="column" flexGrow={1}>
+          <Box flexDirection="column" marginBottom={1}>
+            <Text color="gray" dimColor>CC (claude)</Text>
+            {selectRow(0, 'auth', AUTHS, ccAuth)}
+            {textRow(1, 'key env', ccKeyEnv, 'ANTHROPIC_API_KEY')}
+          </Box>
+
+          <Box flexDirection="column" marginBottom={1}>
+            <Text color="gray" dimColor>CODEX</Text>
+            {selectRow(2, 'auth', AUTHS, codexAuth)}
+            {textRow(3, 'key env', codexKeyEnv, 'OPENAI_API_KEY')}
+          </Box>
+
+          <Box flexDirection="column" marginBottom={1}>
+            <Text color="gray" dimColor>GEMINI</Text>
+            {selectRow(4, 'auth', AUTHS, geminiAuth)}
+            {textRow(5, 'key env', geminiKeyEnv, 'GEMINI_API_KEY')}
+          </Box>
+
+          <Box>
+            <Text color={focusIdx === TOTAL_FIELDS - 1 ? '#5a96e0' : 'gray'} bold={focusIdx === TOTAL_FIELDS - 1}>
+              {focusIdx === TOTAL_FIELDS - 1 ? '>' : ' '} [save]
+            </Text>
+            {saved && <Text color="green">  saved</Text>}
+          </Box>
+
+          <CommandPicker completions={completions} selectedIdx={selectedIdx} />
+        </Box>
+
+        {panes >= 2 && (
+          <Box flexDirection="column" width={40} marginLeft={2} borderStyle="round" borderColor="#1e2d3e" paddingLeft={1} paddingRight={1}>
+            <Text color="gray" bold>CURRENT VALUES</Text>
+            <Box flexDirection="column" marginTop={1}>
+              <Text color="gray" dimColor>CC</Text>
+              <Text color="gray">auth: {cfg.providers.cc.auth}</Text>
+              <Text color="gray">key_env: {cfg.providers.cc.key_env || '—'}</Text>
+            </Box>
+            <Box flexDirection="column" marginTop={1}>
+              <Text color="gray" dimColor>CODEX</Text>
+              <Text color="gray">auth: {cfg.providers.codex.auth}</Text>
+              <Text color="gray">key_env: {cfg.providers.codex.key_env || '—'}</Text>
+            </Box>
+            <Box flexDirection="column" marginTop={1}>
+              <Text color="gray" dimColor>GEMINI</Text>
+              <Text color="gray">auth: {cfg.providers.gemini.auth}</Text>
+              <Text color="gray">key_env: {cfg.providers.gemini.key_env || '—'}</Text>
+            </Box>
+          </Box>
+        )}
       </Box>
 
-      <Box flexDirection="column" marginBottom={1}>
-        <Text color="gray" dimColor>CODEX</Text>
-        {selectRow(2, 'auth', AUTHS, codexAuth)}
-        {textRow(3, 'key env', codexKeyEnv, 'OPENAI_API_KEY')}
-      </Box>
-
-      <Box flexDirection="column" marginBottom={1}>
-        <Text color="gray" dimColor>GEMINI</Text>
-        {selectRow(4, 'auth', AUTHS, geminiAuth)}
-        {textRow(5, 'key env', geminiKeyEnv, 'GEMINI_API_KEY')}
-      </Box>
-
-      <Box>
-        <Text color={focusIdx === TOTAL_FIELDS - 1 ? '#5a96e0' : 'gray'} bold={focusIdx === TOTAL_FIELDS - 1}>
-          {focusIdx === TOTAL_FIELDS - 1 ? '>' : ' '} [save]
-        </Text>
-        {saved && <Text color="green">  saved</Text>}
-      </Box>
-
-      <Box flexDirection="column" marginTop={1}>
-        <CommandPicker completions={completions} selectedIdx={selectedIdx} />
+      <Box flexDirection="column">
         {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
         <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
           <Text color="gray">/ </Text>
@@ -186,8 +216,6 @@ export function Settings() {
           {!cmdMode && <Text color="gray" dimColor>tab to navigate, enter to edit/save</Text>}
         </Box>
       </Box>
-
-      <StatusBar screen="settings" />
     </Box>
   )
 }
