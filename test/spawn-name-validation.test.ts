@@ -1,36 +1,37 @@
 import { describe, it, expect } from 'vitest'
 
-function validateSpawnName(name: string): boolean {
-  if (name.length > 30) return false
-  return /^[A-Za-z0-9_-]*$/.test(name)
-}
-
 describe('Spawn name validation', () => {
-  it('accepts empty string', () => {
-    expect(validateSpawnName('')).toBe(true)
+  it('accepts empty string (auto-generate)', async () => {
+    const { validateName } = await import('../src/utils/validateName.js')
+    expect(validateName('')).toBeNull()
   })
 
-  it('accepts alphanumeric', () => {
-    expect(validateSpawnName('agent1')).toBe(true)
-    expect(validateSpawnName('AgentOne')).toBe(true)
+  it('accepts alphanumeric', async () => {
+    const { validateName } = await import('../src/utils/validateName.js')
+    expect(validateName('agent1')).toBeNull()
+    expect(validateName('AgentOne')).toBeNull()
   })
 
-  it('accepts underscore and dash', () => {
-    expect(validateSpawnName('my-agent')).toBe(true)
-    expect(validateSpawnName('my_agent')).toBe(true)
+  it('accepts underscore and dash', async () => {
+    const { validateName } = await import('../src/utils/validateName.js')
+    expect(validateName('my-agent')).toBeNull()
+    expect(validateName('my_agent')).toBeNull()
   })
 
-  it('rejects spaces', () => {
-    expect(validateSpawnName('my agent')).toBe(false)
+  it('rejects spaces', async () => {
+    const { validateName } = await import('../src/utils/validateName.js')
+    expect(validateName('my agent')).not.toBeNull()
   })
 
-  it('rejects special chars', () => {
-    expect(validateSpawnName('agent:1')).toBe(false)
-    expect(validateSpawnName('agent.name')).toBe(false)
+  it('rejects special chars', async () => {
+    const { validateName } = await import('../src/utils/validateName.js')
+    expect(validateName('agent:1')).not.toBeNull()
+    expect(validateName('agent.name')).not.toBeNull()
   })
 
-  it('rejects length > 30', () => {
-    expect(validateSpawnName('a'.repeat(31))).toBe(false)
-    expect(validateSpawnName('a'.repeat(30))).toBe(true)
+  it('rejects length > 30', async () => {
+    const { validateName } = await import('../src/utils/validateName.js')
+    expect(validateName('a'.repeat(31))).not.toBeNull()
+    expect(validateName('a'.repeat(30))).toBeNull()
   })
 })
