@@ -146,6 +146,9 @@ Arrow keys navigate lists. `Tab` / `Shift+Tab` moves between fields on forms. `E
 | Claude Code | `claude` | `subscription`, `api-key`, `custom` |
 | Codex | `codex` | `subscription`, `api-key`, `custom` |
 | Gemini | `gemini` | `subscription`, `api-key`, `custom` |
+| OpenCode | `opencode` | `subscription`, `api-key`, `custom` |
+| Aider | `aider` | `subscription`, `api-key`, `custom` |
+| Hermes | `hermes` | `subscription`, `api-key`, `custom` |
 
 `subscription` uses the CLI's native OAuth login. `api-key` passes a key from your environment or directly. `custom` sets a base URL and key for self-hosted or proxy endpoints.
 
@@ -157,27 +160,26 @@ Arrow keys navigate lists. `Tab` / `Shift+Tab` moves between fields on forms. `E
 import { spawn, orchestrate, fanOut } from 'reevesagents'
 
 // Spawn one session
-const session = await spawn({
+const session = spawn({
   provider: 'cc',
   auth: 'subscription',
   permissions: 'skip',
-  prompt: 'build a REST API',
+  start_prompt: 'build a REST API',
 })
 
 // Fan out N identical workers
-const sessions = await fanOut({
-  count: 3,
-  provider: 'cc',
-  auth: 'subscription',
-  permissions: 'skip',
-  prompt: 'fix the tests',
-})
+const sessions = fanOut(
+  3,
+  { provider: 'cc', auth: 'subscription', permissions: 'skip', model: null, effort: 'high' },
+  'fix the tests',
+  'sprint-1',
+)
 
 // Full orchestration with named workers
-const result = await orchestrate(
+const result = orchestrate(
   'build a TODO app',
   'todo-v1',
-  { provider: 'cc', auth: 'subscription', permissions: 'skip', effort: 'high' },
+  { provider: 'cc', auth: 'subscription', permissions: 'skip', model: null, effort: 'high' },
   [
     { name: 'backend', prompt: 'REST API with auth' },
     { name: 'frontend', prompt: 'React UI' },
