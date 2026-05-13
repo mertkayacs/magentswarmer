@@ -3,7 +3,7 @@
 // Inputs: loadConfig on mount. Outputs: saves on submit.
 // Invariant: section switch with left/right arrow at save button; field edit with enter in fields.
 
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
@@ -44,6 +44,7 @@ export function Settings() {
   const [section, setSection] = useState<Section>('cc')
   const [focusField, setFocusField] = useState(0)
   const [saveMsg, setSaveMsg] = useState('')
+  const [cursor, setCursor] = useState(0)
 
   const isGlobal = section === 'global'
   const fields = isGlobal ? GLOBAL_FIELDS : PROVIDER_FIELDS
@@ -58,6 +59,56 @@ export function Settings() {
 
   const nav = useScreenNav(push, pop, fieldFocused)
   const { cmdMode } = nav
+
+  function getTextFieldValue(): string {
+    if (isGlobal) {
+      return focusField === 0 ? config.global.tmux_session_name : ''
+    }
+    const s = section as Provider
+    const pc = config.providers[s]
+    const f = fields[focusField] as ProviderField
+    if (f === 'key_env') return pc.key_env ?? ''
+    if (f === 'base_url') return pc.base_url ?? ''
+    if (f === 'default_model') return pc.default_model ?? ''
+    return ''
+  }
+
+  function moveFocusField(newIdx: number) {
+    setFocusField(newIdx)
+    const currentIsText = isGlobal
+      ? isTextGlobal(fields[newIdx] as GlobalField)
+      : isTextProvider(fields[newIdx] as ProviderField)
+    if (currentIsText) {
+      const nf = newIdx
+      // compute target value without closure issue — read directly from config
+      if (isGlobal) {
+        setCursor(nf === 0 ? config.global.tmux_session_name.length : 0)
+      } else {
+        const s = section as Provider
+        const pc = config.providers[s]
+        const f = fields[nf] as ProviderField
+        const v = f === 'key_env' ? (pc.key_env ?? '') : f === 'base_url' ? (pc.base_url ?? '') : f === 'default_model' ? (pc.default_model ?? '') : ''
+        setCursor(v.length)
+      }
+    }
+  }
+
+  const renderCursor = useCallback((value: string, cur: number): React.ReactNode => {
+    const MAX = 53
+    if (value.length <= MAX) {
+      return <Text>{value.slice(0, cur)}<Text color="#5a96e0">█</Text>{value.slice(cur)}</Text>
+    }
+    const half = Math.floor(MAX / 2)
+    const start = Math.max(0, Math.min(cur - half, value.length - MAX))
+    const end = start + MAX
+    const view = value.slice(start, end)
+    const civ = cur - start
+    return (
+      <Text>
+        {start > 0 ? '…' : ''}{view.slice(0, civ)}<Text color="#5a96e0">█</Text>{view.slice(civ)}{end < value.length ? '…' : ''}
+      </Text>
+    )
+  }, [])
 
   function providerFieldVisible(f: ProviderField): boolean {
     if (section === 'global') return false
@@ -87,32 +138,46 @@ export function Settings() {
   }
 
   useInput((input, key) => {
-    // Tab always advances (even in text fields)
-    if (key.tab) { setFocusField(i => Math.min(totalFields - 1, i + 1)); return }
+    if (key.tab) { moveFocusField(Math.min(totalFields - 1, focusField + 1)); return }
 
     if (isTextField) {
       if (key.escape) { pop(); return }
-      if (key.upArrow) { setFocusField(i => Math.max(0, i - 1)); return }
-      if (key.downArrow || key.return) { setFocusField(i => Math.min(totalFields - 1, i + 1)); return }
-      if (key.backspace || key.delete) {
-        if (isGlobal) updateGlobalText('tmux_session_name', v => v.slice(0, -1))
-        else updateProviderField(fields[focusField] as ProviderField, v => v.slice(0, -1))
+      if (key.upArrow) { moveFocusField(Math.max(0, focusField - 1)); return }
+      if (key.downArrow || key.return) { moveFocusField(Math.min(totalFields - 1, focusField + 1)); return }
+      if (key.leftArrow) { setCursor(c => Math.max(0, c - 1)); return }
+      if (key.rightArrow) { setCursor(c => Math.min(getTextFieldValue().length, c + 1)); return }
+      if (key.ctrl && input === 'a') { setCursor(0); return }
+      if (key.ctrl && input === 'e') { setCursor(getTextFieldValue().length); return }
+      if (key.backspace) {
+        if (cursor === 0) return
+        if (isGlobal) updateGlobalText('tmux_session_name', v => v.slice(0, cursor - 1) + v.slice(cursor))
+        else updateProviderField(fields[focusField] as ProviderField, v => v.slice(0, cursor - 1) + v.slice(cursor))
+        setCursor(c => c - 1)
+        return
+      }
+      if (key.delete) {
+        const fv = getTextFieldValue()
+        if (cursor >= fv.length) return
+        if (isGlobal) updateGlobalText('tmux_session_name', v => v.slice(0, cursor) + v.slice(cursor + 1))
+        else updateProviderField(fields[focusField] as ProviderField, v => v.slice(0, cursor) + v.slice(cursor + 1))
         return
       }
       if (!key.ctrl && !key.meta && input) {
-        if (isGlobal) updateGlobalText('tmux_session_name', v => v + input)
-        else updateProviderField(fields[focusField] as ProviderField, v => v + input)
+        if (isGlobal) updateGlobalText('tmux_session_name', v => v.slice(0, cursor) + input + v.slice(cursor))
+        else updateProviderField(fields[focusField] as ProviderField, v => v.slice(0, cursor) + input + v.slice(cursor))
+        setCursor(c => c + 1)
       }
       return
     }
 
-    if (key.upArrow) { setFocusField(i => Math.max(0, i - 1)); return }
-    if (key.downArrow) { setFocusField(i => Math.min(totalFields - 1, i + 1)); return }
+    if (key.upArrow) { moveFocusField(Math.max(0, focusField - 1)); return }
+    if (key.downArrow) { moveFocusField(Math.min(totalFields - 1, focusField + 1)); return }
     if (key.leftArrow || key.rightArrow) {
       const dir = key.leftArrow ? -1 : 1 as 1 | -1
       if (focusField === totalFields - 1) {
         setSection(s => cycle(SECTIONS, s, dir))
         setFocusField(0)
+        setCursor(0)
         return
       }
       const field = fields[focusField]
@@ -159,7 +224,7 @@ export function Settings() {
       <Box key={field}>
         <Text color={isFocused ? '#5a96e0' : 'gray'} bold={isFocused}>{(isFocused ? '> ' : '  ') + label.padEnd(14)}</Text>
         {isActive ? (
-          <Text>{valueText}<Text color="#5a96e0">█</Text></Text>
+          renderCursor(valueText, cursor)
         ) : (
           <Text color={valueText ? 'white' : 'gray'} dimColor={!valueText}>{valueText || '(empty)'}</Text>
         )}
@@ -172,7 +237,7 @@ export function Settings() {
       screen="Settings"
       panes={panes}
       nav={nav}
-      hint="tab/↑↓ navigate  ← → select  type to edit  ← → at save: switch section"
+      hint="tab/↑↓ navigate  ← → select/cursor  ctrl-a/e home/end  ← → at save: switch section"
       header={
         <Box>
           <Text color="#5a96e0" bold>REEVES AGENTS</Text>
@@ -245,7 +310,7 @@ export function Settings() {
               {(focusField === 0 ? '> ' : '  ') + 'tmux session   '}
             </Text>
             {focusField === 0 ? (
-              <Text>{config.global.tmux_session_name}<Text color="#5a96e0">█</Text></Text>
+              renderCursor(config.global.tmux_session_name, cursor)
             ) : (
               <Text color="white">{config.global.tmux_session_name}</Text>
             )}
