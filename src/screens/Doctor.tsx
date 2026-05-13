@@ -44,6 +44,10 @@ const FIX_HINTS: Record<string, string[]> = {
     '',
     'Aider:',
     '  pip install aider-chat',
+    '',
+    'Hermes:',
+    '  brew install hermes-agent',
+    '  pip install hermes-agent',
   ],
   'state dir': [
     'Create the directory:',

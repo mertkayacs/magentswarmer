@@ -9,7 +9,7 @@ import type { Config, Provider, ProviderConfig, Auth, Permissions, Effort } from
 
 const SCHEMA_VERSION = 1
 
-const ALL_PROVIDERS: Provider[] = ['cc', 'codex', 'gemini', 'opencode', 'aider']
+const ALL_PROVIDERS: Provider[] = ['cc', 'codex', 'gemini', 'opencode', 'aider', 'hermes']
 
 const DEFAULT_PROVIDERS: Record<Provider, ProviderConfig> = {
   cc: {
@@ -48,6 +48,14 @@ const DEFAULT_PROVIDERS: Record<Provider, ProviderConfig> = {
     auth: 'api-key',
     base_url: null,
     key_env: 'ANTHROPIC_API_KEY',
+    default_model: null,
+    default_permissions: 'ask',
+    default_effort: null
+  },
+  hermes: {
+    auth: 'subscription',
+    base_url: null,
+    key_env: null,
     default_model: null,
     default_permissions: 'ask',
     default_effort: null

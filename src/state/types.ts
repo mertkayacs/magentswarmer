@@ -1,7 +1,7 @@
 // Shared types across state, launcher, and UI layers.
 // All JSON schemas are byte-compatible with v2 Python format.
 
-export type Provider = 'cc' | 'codex' | 'gemini' | 'opencode' | 'aider'
+export type Provider = 'cc' | 'codex' | 'gemini' | 'opencode' | 'aider' | 'hermes'
 export type Auth = 'subscription' | 'api-key' | 'custom'
 export type Permissions = 'skip' | 'ask'
 export type Effort = 'low' | 'medium' | 'high'
