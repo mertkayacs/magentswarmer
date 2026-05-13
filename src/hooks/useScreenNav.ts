@@ -37,7 +37,7 @@ for (const r of DEDUPED_ROUTES) {
 // Legacy aliases kept for backward compat
 SLASH_ROUTES['/welcome'] = 'Welcome'
 
-interface ScreenNavState {
+export interface ScreenNavState {
   cmdMode: boolean
   cmdValue: string
   cmdError: string

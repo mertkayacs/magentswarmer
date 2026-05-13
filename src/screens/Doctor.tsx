@@ -38,6 +38,12 @@ const FIX_HINTS: Record<string, string[]> = {
     '',
     'Gemini:',
     '  npm i -g @google/gemini-cli',
+    '',
+    'OpenCode:',
+    '  npm i -g opencode-ai',
+    '',
+    'Aider:',
+    '  pip install aider-chat',
   ],
   'state dir': [
     'Create the directory:',

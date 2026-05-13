@@ -1,9 +1,9 @@
 # reevesagents — Master Checklist
 
 Single source of truth for what is done, in progress, and still needed.
-Updated: 2026-05-12.
+Updated: 2026-05-13.
 
-Legend: ✅ done · ⬜ open · 🔲 plan written, not executed · 📝 plan not yet written
+Legend: ✅ done · ⬜ open · 🔧 in progress
 
 ---
 
@@ -11,245 +11,167 @@ Legend: ✅ done · ⬜ open · 🔲 plan written, not executed · 📝 plan not
 
 | Document | Status |
 |---|---|
-| `docs/superpowers/specs/2026-05-12-reevesagents-design.md` | ✅ Complete, single source of truth |
-| `docs/superpowers/plans/2026-05-12-plan1-foundation.md` | ✅ Written and fully executed |
-| `docs/superpowers/plans/2026-05-12-plan2-core-screens.md` | 🔲 Written, not yet executed |
-| Plan 3 — New Screens | 🔲 Written, not yet executed |
-| Plan 4 — Power Features | 🔲 Written, not yet executed |
-| Plan 5 — Polish | 🔲 Written, not yet executed |
+| `docs/superpowers/specs/2026-05-12-reevesagents-design.md` | ✅ Complete |
+| `docs/superpowers/plans/2026-05-12-plan1-foundation.md` | ✅ Written and executed |
+| `docs/superpowers/plans/2026-05-12-plan2-core-screens.md` | ✅ Written and executed |
+| `docs/superpowers/plans/2026-05-12-plan3-new-screens.md` | ✅ Written and executed |
+| `docs/superpowers/plans/2026-05-12-plan4-power-features.md` | ✅ Written and executed |
+| `docs/superpowers/plans/2026-05-12-plan5-polish.md` | ✅ Written and executed |
 | Distribution strategy | ✅ Decided: npm primary, Homebrew tap secondary |
 
 ---
 
-## 2. Feature backlog
+## 2. Provider CLI compatibility
 
-### P0 — Audit fixes (all done)
+Verified against installed versions: claude 2.1.126, codex 0.128.0, gemini 0.40.1.
 
-- ✅ B1 Shell injection in spawn.ts
-- ✅ B2 start_prompt fire-and-forget timing
-- ✅ B3 Banner 600-element Ink perf
-- ✅ B4 CommandBar.tsx dead code removed
-- ✅ B6 Store never updated on spawn/orchestrate
-- ✅ B15 Doctor node version via subprocess
-- ✅ F12 `reevesagents attach <id>` CLI subcommand
-- ✅ `reevesagents switch` + Prefix+A tmux popup binding
-
-### P1 — Foundation
-
-- ✅ Autocomplete command bar (DEDUPED_ROUTES, completions, selectedIdx, Tab/↑↓)
-- ✅ Banner diagonal gradient (direction param in gradientChars)
-- 🔲 Pane-responsive layouts on all screens (Plan 2)
-- 🔲 3-zone layout standard (fixed header / flexGrow content / fixed command bar) on all screens (Plan 2)
-
-### P2 — Core screens
-
-- 🔲 Home screen redesign (Plan 2 Task 3)
-- 🔲 Spawn form redesign (Plan 2 Task 5)
-- 🔲 Orchestrate form redesign (Plan 2 Task 2a)
-- 🔲 Sessions screen redesign (Plan 2 Task 4)
-- 🔲 F5 Form state persistence (pre-fill from loadState().last_spawn / last_orchestrate) (Plan 2)
-- 🔲 B8 uniqueWindowName() in spawn.ts (Plan 2 Task 1)
-- 🔲 G10 Provider color badges in Sessions + Home (Plan 2)
-
-### P3 — New screens
-
-- 📝 Welcome splash (5s auto-advance, diagonal gradient art, first-run gate)
-- 📝 History screen — full implementation (filter ended_at, sort, duration, delete)
-- 📝 /top live monitor — full implementation (flat table, auto-refresh, peek panel)
-
-### P4 — Power features
-
-- 📝 NavSidebar component (3-pane only, width 20, route list, current screen highlighted)
-- 📝 Preset management UI (save after orchestrate, run from Home, delete)
-- 📝 Remote control URL surfacing (pipe-pane, poll log, show in spawn success + sessions peek)
-- 📝 Settings screen redesign (base_url, default_model, default_effort, global section)
-- 📝 Spawn success view (session details block, ATTACH block, RC block, a/c/l/esc)
-- 📝 F11 CLI attach hint (comment line after JSON output in cli.ts)
-
-### P5 — Infrastructure (types + spawn.ts)
-
-- ✅ Session.working_dir, ended_at, rc_url
-- ✅ SpawnRequest.working_dir, remote_control
-- ✅ SpawnFormState.working_dir
-- ✅ ScreenName: 'Top', 'History'
-- ✅ SLASH_ROUTES: /top, /history, /quit
-- ✅ updateSession() in registry.ts
-- ✅ providerColor(), formatAge() in utils/display.ts
-- ✅ peek() in launcher/peek.ts
-- 🔲 uniqueWindowName() helper (Plan 2 Task 1)
-- 🔲 working_dir set from SpawnRequest in spawn() (Plan 2 Task 1)
-- 📝 RC URL pipe-pane polling in spawn() (Plan 4)
-
-### P6 — Polish
-
-- 📝 G13 Spawn progress indicator ("spawning..." state)
-- 📝 G18 Spawn name field validation (no spaces/colons/dots, max 30 chars)
-- 📝 G5 Home last session detail (ID + provider + name below count)
-- 📝 G9 Orchestrate success: attach commands per worker
-- 📝 G15 Error boundary in Router (clean error + r to restart)
-- 📝 G17 NO_COLOR / light terminal fallback (chalk.level < 2)
-- 📝 G14 Doctor tmux version parse (warn if < 3.0)
-- 📝 G7 Goodbye message (30-language farewell on exit)
+| Provider | Binary | Permissions bypass | Model flag | Effort flag | API key env |
+|---|---|---|---|---|---|
+| cc | `claude` | `--dangerously-skip-permissions` ✅ | `--model` ✅ | `--effort` ✅ | `ANTHROPIC_API_KEY` ✅ |
+| codex | `codex` | `--dangerously-bypass-approvals-and-sandbox` ✅ | `--model` ✅ | `-c model_reasoning_effort="..."` ✅ | `OPENAI_API_KEY` ✅ |
+| gemini | `gemini` | `--yolo` ✅ | `--model` ✅ | not supported ✅ | `GEMINI_API_KEY` / `GOOGLE_API_KEY` (both unset on subscription) ✅ |
 
 ---
 
-## 3. Screen completion
+## 3. Feature completion
 
-### Welcome splash
-- 📝 Full-width diagonal gradient ASCII art (REEVES / AGENTS)
-- 📝 Tagline, dim gray, centered
-- 📝 Auto-advance to Home after 5s
-- 📝 Any keypress cancels timer and advances immediately
-- 📝 First-run gate: no configured providers → Settings with hint
-- 📝 Repeat visits: skip splash, go directly to Home
+### Foundation
 
-### Home
-- 🔲 Gradient title line (chalk per-char from gradientChars)
-- 🔲 Provider dots (configured = colored glow, unconfigured = dim ○ + "(→ /settings)")
-- 🔲 Session count in header
-- 🔲 SESSIONS section grouped by working_dir
-- 🔲 Empty state: "no sessions running  s spawn  o orchestrate"
-- 🔲 PRESETS section (only if presets exist — numbered, Enter/number runs, d deletes)
-- 🔲 SHORTCUTS section compact key row
-- 🔲 Right panel (2+ panes): RECENT — last 5 sessions, dimmed if ended
-- 🔲 Key bindings: s/o/l/t/d/h/?/r
+- ✅ Screen stack router (push/pop/replace)
+- ✅ Autocomplete command bar (DEDUPED_ROUTES, completions, Tab/↑↓)
+- ✅ 3-zone layout (fixed header / flexGrow content / fixed command bar) on all screens
+- ✅ Pane-responsive layouts on all screens (1/2/3 panes via usePanes)
+- ✅ Banner diagonal gradient (gradientChars, chalk hex per-char)
 
-### Spawn form
-- 🔲 working_dir field (index 0, defaults to process.cwd())
-- 🔲 provider selector (dimmed if unconfigured, ← → skips over them)
-- 🔲 auth selector
-- 🔲 task text (required)
-- 🔲 effort selector
-- 🔲 permissions selector
-- 🔲 model text (optional, placeholder "default")
-- 📝 name text (validated: no spaces/colons/dots, max 30)
-- 🔲 tag text (optional)
-- 📝 remote ctrl toggle ([ off ] / [ on ])
-- 🔲 LAUNCH button (blue when focused)
-- 🔲 Pre-fill from loadState().last_spawn
-- 🔲 Right panel (2+ panes): per-field contextual help + "from last spawn" indicator
+### Provider infrastructure
 
-### Spawn success
-- 📝 SESSION block: id, provider, name, working_dir, tag
-- 📝 ATTACH block: tmux attach + switch-client commands
-- 📝 REMOTE CONTROL block (only if enabled): URL or "waiting..."
-- 📝 Actions: a attach now, c copy URL, l sessions, esc back
+- ✅ buildCommand() for cc/codex/gemini with correct flags
+- ✅ buildEnv() — subscription unsets API keys, api-key keeps env, custom sets base_url + key
+- ✅ detectAvailable() — which exec path
+- ✅ uniqueWindowName() — dedup tmux window names
+- ✅ Shell injection prevention (shellQuote, execFileSync throughout)
 
-### Orchestrate form
-- 🔲 SHARED CONFIG section (provider, auth, goal, effort, permissions, output_dir)
-- 🔲 WORKERS section — numbered rows, focused = blue border + cursor
-- 🔲 Tab adds new worker
-- 🔲 d deletes focused worker
-- 🔲 FAN OUT × N button
-- 🔲 Right panel (2+ panes): focused worker context + key bindings
-- 🔲 Pre-fill from loadState().last_orchestrate
+### Spawn
 
-### Orchestrate success
-- 🔲 Worker rows: ID, provider, name, task excerpt, ● active
-- 📝 [tab] save as preset → inline name field → addPreset() → confirmation
-- 🔲 Actions: t top, l sessions, esc back
-- 📝 Attach command per worker (G9)
+- ✅ Working dir field (field 0, defaults to cwd)
+- ✅ Provider/auth/task/effort/permissions/model/tag/name fields (10 total)
+- ✅ Name field validation (alphanumeric/dash/underscore, max 30)
+- ✅ Pre-fill from loadState().last_spawn
+- ✅ Spawn progress spinner (80ms braille animation)
+- ✅ Result view: session details, attach instructions, RC URL spinner
+- ✅ a/c/l/esc keyboard handlers in result view
+- ✅ remote_control toggle field in spawn form (field 9, cc-only gated)
 
 ### Sessions
-- 🔲 Grouped by working_dir with SECTION headers
-- 🔲 Auto-refresh every 5s (setInterval, clearInterval on unmount)
-- 🔲 Dead session detection: tmux has-session → stamp ended_at, remove from list
-- 🔲 ↑↓ select row
-- 🔲 Enter: peek panel (15 lines plain text)
-- 🔲 a: attach (switch-client if $TMUX set, else show hint 4s)
-- 🔲 k: kill window
-- 🔲 r: force refresh
-- 🔲 providerColor() and formatAge() on all rows
-- 🔲 Right panel (2+ panes): wider peek (20 lines)
-- 📝 rc_url shown in peek if present + [c] copy
+
+- ✅ Grouped by working_dir with section headers
+- ✅ Auto-refresh every 5s with dead session detection
+- ✅ ↑↓ select, enter peek, a attach, k kill, r refresh
+- ✅ providerColor + formatAge on all rows
+- ✅ rc_url display in peek panel + c to copy (OSC 52)
+
+### Orchestrate
+
+- ✅ Goal/tag/provider/auth/effort/perms/workers form
+- ✅ Pre-fill from loadState().last_orchestrate
+- ✅ Tab to save as preset panel in success view
+- ✅ tmux switch-client command per worker in result
+
+### Home
+
+- ✅ Gradient title (chalk per-char)
+- ✅ Provider dots with color
+- ✅ Sessions grouped by working_dir
+- ✅ Presets section (1-9 run, D delete)
+- ✅ Shortcuts row
+- ✅ Recent right panel (2+ panes)
+- ✅ Last spawned session in header (id · provider · name)
+- ✅ NavSidebar (3-pane)
+- ⬜ NavSidebar on all other screens
+
+### Welcome
+
+- ✅ Diagonal gradient ASCII art (REEVES + AGENTS)
+- ✅ Auto-advance to Home after 5s
+- ✅ Any keypress cancels timer
+- ✅ First-run gate: no providers → Settings
+- ✅ Repeat visits: skip splash
 
 ### History
-- 📝 Filter: only sessions where ended_at != null
-- 📝 Sort: ended_at descending
-- 📝 Group by working_dir
-- 📝 Columns: ID, provider, name/tag, duration, ended_at
-- 📝 d: delete selected entry (registry file delete)
-- 📝 D: wipe all with confirmation prompt ("wipe all history? y/n")
-- 📝 Right panel (2+ panes): full session JSON
 
-### /top live monitor
-- 📝 Auto-refresh every 5s
-- 📝 Flat session table (no grouping)
-- 📝 Columns: ID, provider, name/tag, working_dir (truncated), age, last_seen, status
-- 📝 ↑↓ select, a attach, k kill, r force refresh
-- 📝 Right panel (2+ panes): peek of selected session (15 lines)
-- 📝 3-pane: NavSidebar + list + peek
+- ✅ Filter ended sessions, sort by ended_at desc, group by working_dir
+- ✅ Duration column (formatDuration)
+- ✅ d delete, D wipe-all with confirmation
+- ✅ Right panel: full session JSON
 
-### Switch modal
-- ✅ Floating popup via `tmux display-popup -w 90 -h 20`
-- ✅ Session list: ID, provider, name, age, status
-- ✅ ↑↓ navigate, Enter switch-client, k kill, esc cancel
-- ✅ Prefix+A binding via `reevesagents setup-tmux`
+### Top
+
+- ✅ Flat table, 5s auto-refresh, dead session detection
+- ✅ isStale() status dot
+- ✅ Peek right panel (15 lines)
 
 ### Settings
-- 🔲 Per-provider sections: cc / gemini / codex
-- 🔲 auth field per provider
-- 🔲 key_env text field per provider
-- 📝 base_url text (visible only when auth = custom)
-- 📝 default_model text per provider
-- 📝 default_effort selector per provider
-- 📝 default_permissions selector per provider
-- 📝 Global section: tmux session name (default "reevesagents")
-- 📝 Global section: peek refresh interval (3s / 5s / 10s)
-- 📝 Right panel (2+ panes): raw config values for focused section
+
+- ✅ Per-provider sections (cc/codex/gemini) with auth/key_env/base_url/model/effort/perms
+- ✅ Global section (tmux_session_name, peek_interval_seconds)
+- ✅ 2-pane layout with current values
 
 ### Doctor
-- ✅ Existing checks run on mount
-- 🔲 Right panel (2+ panes): fix hints per check
-- 📝 tmux version parsed, warn if < 3.0
+
+- ✅ Node, tmux (version parse + warn < 3.0), claude, codex, gemini checks
+- ✅ Orphan detection and prune
+- ✅ Contextual fix hints per check in right panel (↑↓ to select check)
 
 ### Help
-- 🔲 COMMANDS section from DEDUPED_ROUTES
-- 🔲 KEYBOARD section (esc / ? / / + cmd)
-- 🔲 HOME SHORTCUTS section
-- 🔲 Right panel (2+ panes): extended description per highlighted binding
+
+- ✅ COMMANDS from DEDUPED_ROUTES
+- ✅ KEYBOARD section
+- ✅ HOME SHORTCUTS section
+- ✅ Right panel session shortcuts
+
+### NavSidebar
+
+- ✅ Component (width 20, route list, current screen highlighted blue)
+- ✅ Wired into all screens (Home, Sessions, Spawn, Orchestrate, Settings, History, Top, Doctor, Help)
+
+### Error handling
+
+- ✅ ErrorBoundary class component
+- ✅ process.on('uncaughtException') in cli.ts
+
+### Polish
+
+- ✅ NO_COLOR / chalk.level fallback in banner + CommandPicker
+- ✅ Doctor tmux version parse (warn < 3.0)
+- ✅ 30 rotating goodbye messages on exit
+- ✅ CLI attach hint after spawn JSON output
 
 ---
 
-## 4. NavSidebar (3-pane only)
-
-- 📝 `src/components/NavSidebar.tsx` — new file
-- 📝 Width 20, flexDirection="column"
-- 📝 Route list from DEDUPED_ROUTES, current screen highlighted blue
-- 📝 Single-char shortcuts shown dim beside each route
-- 📝 Wired into all screens via usePanes (only rendered when panes === 3)
-
----
-
-## 5. CLI commands
+## 4. CLI commands
 
 | Command | Status |
 |---|---|
-| `reevesagents` (TUI) | ✅ Working |
-| `reevesagents spawn ...` | ✅ Working |
-| `reevesagents orchestrate ...` | ✅ Working |
-| `reevesagents attach <id>` | ✅ Working |
-| `reevesagents switch` | ✅ Working (Ink picker) |
-| `reevesagents setup-tmux` | ✅ Working (Prefix+A) |
-| `reevesagents doctor` | ✅ Working |
-| `reevesagents spawn` (attach hint after JSON) | 📝 F11, 1 line change |
+| `reevesagents` (TUI) | ✅ |
+| `reevesagents spawn ...` | ✅ |
+| `reevesagents orchestrate ...` | ✅ |
+| `reevesagents attach <id>` | ✅ |
+| `reevesagents switch` | ✅ |
+| `reevesagents setup-tmux` | ✅ |
+| `reevesagents doctor` | ✅ |
 
 ---
 
-## 6. Distribution
+## 5. Distribution
 
-- ⬜ npm package published to npmjs.com (`npm publish`)
-- ⬜ Homebrew personal tap (`brew tap mertkaya/reevesagents`) — after npm publish
-- ⬜ homebrew-core submission — after meaningful user adoption
+- ⬜ npm publish (`npm publish`)
+- ⬜ Homebrew personal tap — after npm publish
+- ⬜ homebrew-core — after adoption
 
 ---
 
-## 7. Execution order
+## 6. Open items
 
-| Plan | Covers | Status |
+| # | Item | Priority |
 |---|---|---|
-| Plan 1 — Foundation | Types, updateSession, diagonal gradient, autocomplete, CommandPicker, Top/History placeholders | ✅ Done |
-| Plan 2 — Core Screens | spawn.ts infra, 3-zone layout, Home, Sessions, Spawn, Orchestrate redesigns | 🔲 Written, run this next |
-| Plan 3 — New Screens | Welcome splash, History full, /top full | 🔲 Written, run after Plan 2 |
-| Plan 4 — Power Features | NavSidebar, Presets, RC URL, Settings full, Spawn success | 🔲 Written, run after Plan 3 |
-| Plan 5 — Polish | G-series items, error boundary, NO_COLOR, goodbye message | 🔲 Written, run after Plan 4 |
+| 1 | npm publish + Homebrew tap | P2 |

@@ -7,25 +7,34 @@ import type { Provider, SpawnConfig } from '../state/types.js'
 export const DEFAULT_KEY_VAR: Record<Provider, string> = {
   cc: 'ANTHROPIC_API_KEY',
   codex: 'OPENAI_API_KEY',
-  gemini: 'GEMINI_API_KEY'
+  gemini: 'GEMINI_API_KEY',
+  opencode: 'OPENAI_API_KEY',
+  aider: 'ANTHROPIC_API_KEY',
 }
 
+// Env vars to unset when auth=subscription (force provider's own auth flow)
 const SUBSCRIPTION_UNSET: Record<Provider, string[]> = {
   cc: ['ANTHROPIC_API_KEY'],
   codex: ['OPENAI_API_KEY'],
-  gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY']
+  gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+  opencode: [],  // opencode uses its own auth.json; don't touch env
+  aider: [],     // subscription = "keys already in env, leave them"
 }
 
 const BASE_URL_VAR: Record<Provider, string> = {
   cc: 'ANTHROPIC_BASE_URL',
   codex: 'OPENAI_BASE_URL',
-  gemini: 'GEMINI_BASE_URL'
+  gemini: 'GEMINI_BASE_URL',
+  opencode: 'OPENAI_BASE_URL',
+  aider: 'ANTHROPIC_BASE_URL',
 }
 
 export const BIN: Record<Provider, string> = {
   cc: 'claude',
   codex: 'codex',
-  gemini: 'gemini'
+  gemini: 'gemini',
+  opencode: 'opencode',
+  aider: 'aider',
 }
 
 export function buildEnv(cfg: SpawnConfig, baseEnv: Record<string, string>): Record<string, string> {
@@ -92,7 +101,7 @@ export function buildCommand(cfg: SpawnConfig): string[] {
     }
 
     if (cfg.model) {
-      cmd.push('-c', `model="${cfg.model}"`)
+      cmd.push('--model', cfg.model)
     }
 
     if (cfg.effort) {
@@ -106,13 +115,30 @@ export function buildCommand(cfg: SpawnConfig): string[] {
     if (cfg.permissions === 'skip') {
       cmd.push('--yolo')
     }
-
     if (cfg.model) {
       cmd.push('--model', cfg.model)
     }
-
     // effort unsupported for gemini
+    return cmd
+  }
 
+  if (cfg.provider === 'opencode') {
+    if (cfg.model) {
+      cmd.push('--model', cfg.model)
+    }
+    // no documented permissions-skip flag; opencode is interactive by default
+    // effort unsupported
+    return cmd
+  }
+
+  if (cfg.provider === 'aider') {
+    if (cfg.permissions === 'skip') {
+      cmd.push('--yes')
+    }
+    if (cfg.model) {
+      cmd.push('--model', cfg.model)
+    }
+    // effort unsupported for aider
     return cmd
   }
 
@@ -123,10 +149,12 @@ export function detectAvailable(): Record<Provider, boolean> {
   const result: Record<Provider, boolean> = {
     cc: false,
     codex: false,
-    gemini: false
+    gemini: false,
+    opencode: false,
+    aider: false,
   }
 
-  for (const provider of ['cc', 'codex', 'gemini'] as const) {
+  for (const provider of Object.keys(BIN) as Provider[]) {
     const bin = BIN[provider]
 
     try {
