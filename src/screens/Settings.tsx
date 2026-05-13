@@ -35,7 +35,7 @@ function effortLabel(e: Effort | null): string {
   return e ?? '—'
 }
 
-const SECTIONS: Section[] = ['cc', 'codex', 'gemini', 'opencode', 'aider', 'global']
+const SECTIONS: Section[] = ['cc', 'codex', 'gemini', 'opencode', 'aider', 'hermes', 'global']
 
 export function Settings() {
   const { push, pop } = useRouter()
@@ -43,7 +43,6 @@ export function Settings() {
   const [config, setConfig] = useState(() => loadConfig())
   const [section, setSection] = useState<Section>('cc')
   const [focusField, setFocusField] = useState(0)
-  const [editing, setEditing] = useState(false)
   const [saveMsg, setSaveMsg] = useState('')
 
   const isGlobal = section === 'global'
@@ -55,7 +54,7 @@ export function Settings() {
   const isTextField = isGlobal
     ? isTextGlobal(fields[focusField] as GlobalField)
     : isTextProvider(fields[focusField] as ProviderField)
-  const fieldFocused = editing && isTextField
+  const fieldFocused = isTextField
 
   const nav = useScreenNav(push, pop, fieldFocused)
   const { cmdMode } = nav
@@ -88,28 +87,27 @@ export function Settings() {
   }
 
   useInput((input, key) => {
-    if (fieldFocused) {
-      if (key.escape || key.return) { setEditing(false); return }
+    // Tab always advances (even in text fields)
+    if (key.tab) { setFocusField(i => Math.min(totalFields - 1, i + 1)); return }
+
+    if (isTextField) {
+      if (key.escape) { pop(); return }
+      if (key.upArrow) { setFocusField(i => Math.max(0, i - 1)); return }
+      if (key.downArrow || key.return) { setFocusField(i => Math.min(totalFields - 1, i + 1)); return }
       if (key.backspace || key.delete) {
-        if (isGlobal) {
-          updateGlobalText('tmux_session_name', v => v.slice(0, -1))
-        } else {
-          updateProviderField(fields[focusField] as ProviderField, v => v.slice(0, -1))
-        }
+        if (isGlobal) updateGlobalText('tmux_session_name', v => v.slice(0, -1))
+        else updateProviderField(fields[focusField] as ProviderField, v => v.slice(0, -1))
         return
       }
-      if (!key.ctrl && !key.meta) {
-        if (isGlobal) {
-          updateGlobalText('tmux_session_name', v => v + input)
-        } else {
-          updateProviderField(fields[focusField] as ProviderField, v => v + input)
-        }
+      if (!key.ctrl && !key.meta && input) {
+        if (isGlobal) updateGlobalText('tmux_session_name', v => v + input)
+        else updateProviderField(fields[focusField] as ProviderField, v => v + input)
       }
       return
     }
 
-    if (key.tab || key.downArrow) { setFocusField(i => Math.min(totalFields - 1, i + 1)); return }
     if (key.upArrow) { setFocusField(i => Math.max(0, i - 1)); return }
+    if (key.downArrow) { setFocusField(i => Math.min(totalFields - 1, i + 1)); return }
     if (key.leftArrow || key.rightArrow) {
       const dir = key.leftArrow ? -1 : 1 as 1 | -1
       if (focusField === totalFields - 1) {
@@ -135,14 +133,10 @@ export function Settings() {
       }
       return
     }
-    if (key.return) {
-      if (focusField === totalFields - 1) {
-        saveConfig(config)
-        setSaveMsg('saved')
-        setTimeout(() => setSaveMsg(''), 2000)
-        return
-      }
-      if (isTextField) { setEditing(true) }
+    if (key.return && focusField === totalFields - 1) {
+      saveConfig(config)
+      setSaveMsg('saved')
+      setTimeout(() => setSaveMsg(''), 2000)
     }
   }, { isActive: !cmdMode })
 
@@ -160,7 +154,7 @@ export function Settings() {
     else if (field === 'default_model') valueText = pc.default_model ?? ''
     else if (field === 'default_effort') valueText = effortLabel(pc.default_effort)
     else if (field === 'default_permissions') valueText = pc.default_permissions
-    const isActive = isFocused && editing
+    const isActive = isFocused && isTextProvider(field)
     return (
       <Box key={field}>
         <Text color={isFocused ? '#5a96e0' : 'gray'} bold={isFocused}>{(isFocused ? '> ' : '  ') + label.padEnd(14)}</Text>
@@ -178,7 +172,7 @@ export function Settings() {
       screen="Settings"
       panes={panes}
       nav={nav}
-      hint="tab/↑↓ navigate  ← → select  enter edit  ← → at save: switch section"
+      hint="tab/↑↓ navigate  ← → select  type to edit  ← → at save: switch section"
       header={
         <Box>
           <Text color="#5a96e0" bold>REEVES AGENTS</Text>
@@ -250,7 +244,7 @@ export function Settings() {
             <Text color={focusField === 0 ? '#5a96e0' : 'gray'} bold={focusField === 0}>
               {(focusField === 0 ? '> ' : '  ') + 'tmux session   '}
             </Text>
-            {editing && focusField === 0 ? (
+            {focusField === 0 ? (
               <Text>{config.global.tmux_session_name}<Text color="#5a96e0">█</Text></Text>
             ) : (
               <Text color="white">{config.global.tmux_session_name}</Text>

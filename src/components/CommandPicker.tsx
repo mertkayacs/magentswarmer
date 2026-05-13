@@ -16,7 +16,9 @@ interface Props {
 export function CommandPicker({ completions, selectedIdx }: Props) {
   if (completions.length === 0) return null
 
-  const visible = completions.slice(0, 5)
+  const VISIBLE = 5
+  const windowStart = Math.max(0, Math.min(selectedIdx - 2, completions.length - VISIBLE))
+  const visible = completions.slice(windowStart, windowStart + VISIBLE)
   const hexOk = chalk.level >= 3
 
   const focusColor = hexOk ? '#5a96e0' : 'blue'
@@ -31,7 +33,7 @@ export function CommandPicker({ completions, selectedIdx }: Props) {
   return (
     <Box flexDirection="column" marginBottom={0}>
       {visible.map((route, i) => {
-        const isSelected = i === selectedIdx
+        const isSelected = windowStart + i === selectedIdx
         return (
           <Box key={route.primary}>
             <Text color={isSelected ? focusColor : dimColor}>
