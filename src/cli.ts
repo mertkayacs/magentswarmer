@@ -43,22 +43,25 @@ program
   .command('spawn', { isDefault: false })
   .description('spawn a single agent session headlessly')
   .requiredOption('-p, --provider <provider>', 'provider: cc, codex, gemini')
-  .requiredOption('-t, --task <task>', 'start prompt for the agent')
+  .option('-t, --task <task>', 'start prompt for the agent')
   .option('-a, --auth <auth>', 'auth mode: subscription, api-key, custom', 'subscription')
-  .option('-e, --effort <effort>', 'effort: low, medium, high')
+  .option('-e, --effort <effort>', 'effort: low, medium, high (max = high)')
   .option('--perms <perms>', 'permissions: ask, skip', 'skip')
   .option('-m, --model <model>', 'model override')
   .option('--tag <tag>', 'session tag')
+  .option('--remote-control', 'poll for remote control URL and store in session')
   .action((opts) => {
+    const effortRaw = opts.effort === 'max' ? 'high' : opts.effort
     try {
       const session = spawn({
         provider: opts.provider as Provider,
         auth: opts.auth as Auth,
         permissions: (opts.perms ?? 'skip') as Permissions,
-        effort: opts.effort ? opts.effort as Effort : undefined,
+        effort: effortRaw ? effortRaw as Effort : undefined,
         model: opts.model,
         tag: opts.tag,
         start_prompt: opts.task,
+        remote_control: opts.remoteControl ?? false,
       })
       console.log(JSON.stringify(session, null, 2))
       console.log(`# attach: tmux attach -t ${session.tmux_session}:${session.tmux_window}`)

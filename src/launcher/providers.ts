@@ -10,6 +10,7 @@ export const DEFAULT_KEY_VAR: Record<Provider, string> = {
   gemini: 'GEMINI_API_KEY',
   opencode: 'OPENAI_API_KEY',
   aider: 'ANTHROPIC_API_KEY',
+  hermes: 'ANTHROPIC_API_KEY',
 }
 
 // Env vars to unset when auth=subscription (force provider's own auth flow)
@@ -19,6 +20,7 @@ const SUBSCRIPTION_UNSET: Record<Provider, string[]> = {
   gemini: ['GEMINI_API_KEY', 'GOOGLE_API_KEY'],
   opencode: [],  // opencode uses its own auth.json; don't touch env
   aider: [],     // subscription = "keys already in env, leave them"
+  hermes: [],    // hermes uses its own auth via hermes init; don't touch env
 }
 
 const BASE_URL_VAR: Record<Provider, string> = {
@@ -27,6 +29,7 @@ const BASE_URL_VAR: Record<Provider, string> = {
   gemini: 'GEMINI_BASE_URL',
   opencode: 'OPENAI_BASE_URL',
   aider: 'ANTHROPIC_BASE_URL',
+  hermes: 'ANTHROPIC_BASE_URL',
 }
 
 export const BIN: Record<Provider, string> = {
@@ -35,6 +38,7 @@ export const BIN: Record<Provider, string> = {
   gemini: 'gemini',
   opencode: 'opencode',
   aider: 'aider',
+  hermes: 'hermes',
 }
 
 export function buildEnv(cfg: SpawnConfig, baseEnv: Record<string, string>): Record<string, string> {
@@ -142,6 +146,15 @@ export function buildCommand(cfg: SpawnConfig): string[] {
     return cmd
   }
 
+  if (cfg.provider === 'hermes') {
+    if (cfg.model) {
+      cmd.push('--model', cfg.model)
+    }
+    // no documented runtime skip-permissions flag
+    // effort unsupported
+    return cmd
+  }
+
   return cmd
 }
 
@@ -152,6 +165,7 @@ export function detectAvailable(): Record<Provider, boolean> {
     gemini: false,
     opencode: false,
     aider: false,
+    hermes: false,
   }
 
   for (const provider of Object.keys(BIN) as Provider[]) {

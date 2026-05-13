@@ -113,43 +113,44 @@ export function spawn(req: SpawnRequest): Session {
     stdio: 'ignore',
   })
 
-  // Send start_prompt after the provider CLI has had time to start.
-  // Uses tmux load-buffer (stdin) + paste-buffer to avoid any quoting issues.
-  if (req.start_prompt) {
-    const prompt = req.start_prompt
-    const target = `${TMUX_SESSION}:${windowName}`
-    setTimeout(() => {
-      try {
-        execFileSync('tmux', ['load-buffer', '-'], {
-          input: prompt,
-          stdio: ['pipe', 'ignore', 'ignore'],
-        })
-        execFileSync('tmux', ['paste-buffer', '-t', target], { stdio: 'ignore' })
-        execFileSync('tmux', ['send-keys', '-t', target, '', 'Enter'], { stdio: 'ignore' })
-      } catch {
-        // Window may have closed before the delay elapsed
-      }
-    }, INITIAL_PROMPT_DELAY_MS)
-  }
+  const target = `${TMUX_SESSION}:${windowName}`
 
-  // Poll for remote control URL when remote_control=true
   if (req.remote_control) {
+    // Capture all pane output so the RC URL can be scraped once CC prints it.
+    // pipe-pane must be set before CC starts printing.
     const logFile = `/tmp/reeves-${sessionId}.rc.log`
     try {
-      execFileSync('tmux', ['pipe-pane', '-t', `${TMUX_SESSION}:${windowName}`, '-o', `cat >> ${logFile}`], {
-        stdio: 'ignore',
-      })
+      execFileSync('tmux', ['pipe-pane', '-t', target, '-o', `cat >> ${logFile}`], { stdio: 'ignore' })
     } catch {
       // pipe-pane may fail on some systems
     }
 
+    // Send /remote-control after CC has fully initialized (welcome screen visible).
+    // INITIAL_PROMPT_DELAY_MS is too short — CC needs ~3-4s to render its UI.
+    const rcDelay = Math.max(INITIAL_PROMPT_DELAY_MS, 1000) + 2500
+    setTimeout(() => {
+      try {
+        execFileSync('tmux', ['send-keys', '-t', target, '/remote-control', 'Enter'], { stdio: 'ignore' })
+      } catch { /* window may have closed */ }
+
+      // Send task prompt after RC is established (if provided)
+      if (req.start_prompt) {
+        const prompt = req.start_prompt
+        setTimeout(() => {
+          try {
+            execFileSync('tmux', ['load-buffer', '-'], { input: prompt, stdio: ['pipe', 'ignore', 'ignore'] })
+            execFileSync('tmux', ['paste-buffer', '-t', target], { stdio: 'ignore' })
+            execFileSync('tmux', ['send-keys', '-t', target, '', 'Enter'], { stdio: 'ignore' })
+          } catch { /* window may have closed */ }
+        }, 1500)
+      }
+    }, rcDelay)
+
+    // Poll captured log for RC URL (2s interval, 25 attempts = ~50s window)
     let pollCount = 0
     const pollInterval = setInterval(() => {
       pollCount++
-      if (pollCount > 15) {
-        clearInterval(pollInterval)
-        return
-      }
+      if (pollCount > 25) { clearInterval(pollInterval); return }
       try {
         const logContent = readFileSync(logFile, 'utf-8')
         const match = logContent.match(/https:\/\/claude\.ai\/code\/session\/[A-Za-z0-9_-]+/)
@@ -157,10 +158,18 @@ export function spawn(req: SpawnRequest): Session {
           updateSession(sessionId, { rc_url: match[0] })
           clearInterval(pollInterval)
         }
-      } catch {
-        // log file may not exist yet
-      }
+      } catch { /* log file may not exist yet */ }
     }, 2000)
+  } else if (req.start_prompt) {
+    // No remote control — send prompt after provider CLI has had time to start
+    const prompt = req.start_prompt
+    setTimeout(() => {
+      try {
+        execFileSync('tmux', ['load-buffer', '-'], { input: prompt, stdio: ['pipe', 'ignore', 'ignore'] })
+        execFileSync('tmux', ['paste-buffer', '-t', target], { stdio: 'ignore' })
+        execFileSync('tmux', ['send-keys', '-t', target, '', 'Enter'], { stdio: 'ignore' })
+      } catch { /* window may have closed before the delay elapsed */ }
+    }, INITIAL_PROMPT_DELAY_MS)
   }
 
   const now = nowIso()
