@@ -87,7 +87,7 @@ Verified against installed versions: claude 2.1.126, codex 0.128.0, gemini 0.40.
 - ✅ Recent right panel (2+ panes)
 - ✅ Last spawned session in header (id · provider · name)
 - ✅ NavSidebar (3-pane)
-- ⬜ NavSidebar on all other screens
+- ✅ NavSidebar on all other screens (wired via ScreenLayout)
 
 ### Welcome
 
