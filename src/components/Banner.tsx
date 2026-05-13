@@ -6,6 +6,7 @@ import React from 'react'
 import { Box, Text } from 'ink'
 import chalk from 'chalk'
 import { gradientChars, BANNER_ART, GRADIENT_STOPS } from '../brand/banner.js'
+import { COLOR_ENABLED } from '../utils/theme.js'
 
 interface BannerProps {
   art?: string
@@ -18,6 +19,14 @@ export function Banner({ art = BANNER_ART, stops = GRADIENT_STOPS, compact = fal
     return (
       <Box>
         <Text bold color="#5a96e0">REEVES AGENTS</Text>
+      </Box>
+    )
+  }
+
+  if (!COLOR_ENABLED) {
+    return (
+      <Box>
+        <Text bold>REEVES AGENTS</Text>
       </Box>
     )
   }

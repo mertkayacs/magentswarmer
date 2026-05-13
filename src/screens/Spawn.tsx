@@ -15,6 +15,7 @@ import { spawn } from '../launcher/spawn.js'
 import { read } from '../state/registry.js'
 import { loadState } from '../state/store.js'
 import { providerColor } from '../utils/display.js'
+import { validateName } from '../utils/validateName.js'
 import type { Provider, Auth, Effort, Permissions, Session } from '../state/types.js'
 
 const PROVIDERS: Provider[] = ['cc', 'codex', 'gemini']
@@ -156,8 +157,8 @@ export function Spawn() {
     if (!key.ctrl && !key.meta) {
       if (focusIdx === 8) {
         const next = name + input
-        if (next.length > 30) setNameError('max 30 chars')
-        else if (!/^[A-Za-z0-9_-]*$/.test(next)) setNameError('alphanumeric, dash, underscore only')
+        const err = validateName(next)
+        if (err) setNameError(err)
         else { setName(next); setNameError('') }
       } else {
         currentFieldSetter(v => v + input)
@@ -294,6 +295,7 @@ export function Spawn() {
         <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingLeft={1} paddingRight={1} marginBottom={1}>
           <Text color="#4a6fa5">── ATTACH ───────────────────────</Text>
           <Text color="gray" dimColor>tmux attach -t {result.tmux_session}:{result.tmux_window}</Text>
+          <Text color="#6e7681" dimColor>or if in tmux: tmux switch-client -t {result.tmux_session}:{result.tmux_window}</Text>
         </Box>
 
         {rcRequested && (

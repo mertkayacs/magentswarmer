@@ -49,6 +49,11 @@ export function History() {
 
   useEffect(() => { load() }, [load])
 
+  useEffect(() => {
+    const id = setInterval(load, 5000)
+    return () => clearInterval(id)
+  }, [load])
+
   const groups = groupByDir(sessions)
   const flat = flatSessions(groups)
   const selected = flat[selectedIdx] ?? null

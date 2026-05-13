@@ -16,6 +16,7 @@ import { execFileSync } from 'node:child_process'
 import { readFileSync, writeFileSync, existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
+import { pickGoodbye } from './brand/goodbye.js'
 import type { Provider, Auth, Effort, Permissions } from './state/types.js'
 
 process.on('uncaughtException', (err) => {
@@ -23,22 +24,12 @@ process.on('uncaughtException', (err) => {
   process.exit(1)
 })
 
-const GOODBYE_MESSAGES = [
-  'goodbye', 'au revoir', 'auf Wiedersehen', 'hasta luego', 'arrivederci',
-  'sayonara', 'annyeong', 'zai jian', 'khuda hafiz', 'vale',
-  'adieu', 'do svidaniya', 'tchau', 'tot ziens', 'farvel',
-  'hej da', 'nakupenda', 'aloha', 'ciao', 'shukran',
-  'namaste', 'mersi', 'dag', 'czesc', 'pa pa',
-  'yasas', 'güle güle', 'slaan well', 'do pobachennya', 'kwa heri',
-]
-
 let goodbyePrinted = false
 
 function printGoodbye(): void {
   if (goodbyePrinted) return
   goodbyePrinted = true
-  const msg = GOODBYE_MESSAGES[Math.floor(Math.random() * GOODBYE_MESSAGES.length)]
-  process.stderr.write(msg + '\n')
+  process.stderr.write(pickGoodbye() + '\n')
 }
 
 const program = new Command()
