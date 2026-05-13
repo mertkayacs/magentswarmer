@@ -55,6 +55,13 @@ const FIX_HINTS: Record<string, string[]> = {
     '  ~/.local/share/reevesagents',
     '           /sessions',
   ],
+  'tmux binding': [
+    'Add the session picker binding:',
+    '  reevesagents setup-tmux',
+    '',
+    'Adds Prefix+A to ~/.tmux.conf.',
+    'Opens a floating picker from anywhere.',
+  ],
   orphans: [
     'Sessions in registry with no',
     'matching tmux window.',

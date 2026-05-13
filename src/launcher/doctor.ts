@@ -3,8 +3,8 @@
 // Outputs: DoctorResult with checks and list of orphaned sessions.
 // Invariant: all checks complete even if some fail; orphans are sessions in registry but not in tmux.
 
-import { execFileSync, execSync } from 'node:child_process'
-import { existsSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
+import { existsSync, readFileSync } from 'node:fs'
 import { accessSync, constants } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
@@ -107,6 +107,27 @@ function checkRegistry(): CheckResult {
   }
 }
 
+function checkTmuxBinding(): CheckResult {
+  const conf = join(homedir(), '.tmux.conf')
+  try {
+    const content = readFileSync(conf, 'utf-8')
+    const bound = content.includes('# reevesagents')
+    return {
+      name: 'tmux binding',
+      status: bound ? 'ok' : 'warn',
+      detail: bound
+        ? 'Prefix+A session picker active'
+        : 'not configured — run: reevesagents setup-tmux',
+    }
+  } catch {
+    return {
+      name: 'tmux binding',
+      status: 'warn',
+      detail: 'no ~/.tmux.conf — run: reevesagents setup-tmux',
+    }
+  }
+}
+
 function findOrphans(): { check: CheckResult; orphans: import('../state/types.js').Session[] } {
   const orphans: import('../state/types.js').Session[] = []
 
@@ -116,8 +137,8 @@ function findOrphans(): { check: CheckResult; orphans: import('../state/types.js
     // Get all tmux windows in reevesagents session
     let tmuxWindows: string[] = []
     try {
-      const output = execSync(
-        'tmux list-windows -t reevesagents -F "#{window_name}"',
+      const output = execFileSync(
+        'tmux', ['list-windows', '-t', 'reevesagents', '-F', '#{window_name}'],
         { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
       )
       tmuxWindows = output.trim().split('\n').filter(Boolean)
@@ -162,6 +183,7 @@ export function runDoctor(): DoctorResult {
   const checks: CheckResult[] = [
     checkNodeVersion(),
     checkTmux(),
+    checkTmuxBinding(),
     checkProviders(),
     checkStateDir(),
     checkRegistry()
