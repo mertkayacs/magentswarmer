@@ -14,7 +14,7 @@ import { orchestrate } from '../launcher/orchestrate.js'
 import { loadState, addPreset } from '../state/store.js'
 import type { Provider, Auth, Effort, Permissions, Session, WorkerEntry, SharedFormState } from '../state/types.js'
 
-const PROVIDERS: Provider[] = ['cc', 'codex', 'gemini']
+const PROVIDERS: Provider[] = ['cc', 'codex', 'gemini', 'opencode', 'aider']
 const AUTHS: Auth[] = ['subscription', 'api-key', 'custom']
 const EFFORTS: Array<Effort | null> = [null, 'low', 'medium', 'high']
 const PERMS: Permissions[] = ['ask', 'skip']

@@ -1,7 +1,7 @@
 // Shared types across state, launcher, and UI layers.
 // All JSON schemas are byte-compatible with v2 Python format.
 
-export type Provider = 'cc' | 'codex' | 'gemini'
+export type Provider = 'cc' | 'codex' | 'gemini' | 'opencode' | 'aider'
 export type Auth = 'subscription' | 'api-key' | 'custom'
 export type Permissions = 'skip' | 'ask'
 export type Effort = 'low' | 'medium' | 'high'
@@ -30,11 +30,7 @@ export interface ProviderConfig {
 
 export interface Config {
   version: number
-  providers: {
-    cc: ProviderConfig
-    codex: ProviderConfig
-    gemini: ProviderConfig
-  }
+  providers: Record<Provider, ProviderConfig>
   ui: {
     last_used_tag: string | null
     last_used_goal: string | null

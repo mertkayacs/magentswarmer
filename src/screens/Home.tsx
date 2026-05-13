@@ -37,7 +37,7 @@ export function Home() {
   const nav = useScreenNav(push, pop)
   const { cmdMode } = nav
   const { sessions, presets, recentSessions, refresh } = useSessionState()
-  const [providers, setProviders] = useState<Record<Provider, boolean>>({ cc: false, codex: false, gemini: false })
+  const [providers, setProviders] = useState<Record<Provider, boolean>>({ cc: false, codex: false, gemini: false, opencode: false, aider: false })
   const [presetIdx, setPresetIdx] = useState<number | null>(null)
 
   useEffect(() => {
@@ -111,7 +111,7 @@ export function Home() {
           <Box>
             <Text>{titleStr}</Text>
             <Text color="gray" dimColor>  </Text>
-            {(['cc', 'codex', 'gemini'] as Provider[]).map(p => (
+            {(['cc', 'codex', 'gemini', 'opencode', 'aider'] as Provider[]).map(p => (
               <Text key={p} color={providers[p] ? providerColor(p) : '#30363d'}>
                 {providers[p] ? '●' : '○'}{p}{'  '}
               </Text>

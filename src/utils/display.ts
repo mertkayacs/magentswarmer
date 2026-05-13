@@ -9,6 +9,8 @@ export function providerColor(p: Provider): string {
   if (p === 'cc') return '#5a96e0'
   if (p === 'codex') return '#4ade80'
   if (p === 'gemini') return '#facc15'
+  if (p === 'opencode') return '#a78bfa'
+  if (p === 'aider') return '#fb923c'
   return 'gray'
 }
 

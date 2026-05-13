@@ -18,7 +18,7 @@ import { providerColor } from '../utils/display.js'
 import { validateName } from '../utils/validateName.js'
 import type { Provider, Auth, Effort, Permissions, Session } from '../state/types.js'
 
-const PROVIDERS: Provider[] = ['cc', 'codex', 'gemini']
+const PROVIDERS: Provider[] = ['cc', 'codex', 'gemini', 'opencode', 'aider']
 const AUTHS: Auth[] = ['subscription', 'api-key', 'custom']
 const EFFORTS: Array<Effort | null> = [null, 'low', 'medium', 'high']
 const PERMS: Permissions[] = ['ask', 'skip']
@@ -39,10 +39,10 @@ function effortLabel(e: string | null): string {
 
 const FIELD_HELP: Record<number, { label: string; text: string }> = {
   0: { label: 'working dir', text: 'directory the agent will start in — defaults to current directory' },
-  1: { label: 'provider', text: 'cc = Claude Code  codex = OpenAI Codex  gemini = Gemini CLI' },
+  1: { label: 'provider', text: 'cc = Claude Code  codex = OpenAI Codex  gemini = Gemini CLI\nopencode = OpenCode  aider = Aider' },
   2: { label: 'auth', text: 'subscription = your plan  api-key = env var  custom = proxy/self-hosted' },
   3: { label: 'task', text: 'what should the agent do? the more specific the better' },
-  4: { label: 'effort', text: 'high = more thinking/tokens  low = faster/cheaper  — = provider default' },
+  4: { label: 'effort', text: 'high = more thinking/tokens  low = faster/cheaper  — = default\ncc + codex only (opencode/aider ignore this field)' },
   5: { label: 'permissions', text: 'skip = agent acts without asking  ask = agent asks before each tool call' },
   6: { label: 'model', text: 'leave blank for provider default  e.g. opus, sonnet-4, gemini-2.0-flash' },
   7: { label: 'tag', text: 'optional label for grouping sessions  e.g. feature-auth, bugfix-race' },

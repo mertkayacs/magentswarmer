@@ -53,12 +53,11 @@ function checkProviders(): CheckResult {
     .map(([name, isAvail]) => (isAvail ? `${name} ✓` : `${name} ✗`))
     .join('  ')
 
-  const allAvail = providers.every(([, isAvail]) => isAvail)
   const noneAvail = providers.every(([, isAvail]) => !isAvail)
 
   return {
     name: 'providers',
-    status: noneAvail ? 'fail' : allAvail ? 'ok' : 'warn',
+    status: noneAvail ? 'fail' : 'ok',
     detail: statuses
   }
 }

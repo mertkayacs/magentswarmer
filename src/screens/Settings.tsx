@@ -35,7 +35,7 @@ function effortLabel(e: Effort | null): string {
   return e ?? '—'
 }
 
-const SECTIONS: Section[] = ['cc', 'codex', 'gemini', 'global']
+const SECTIONS: Section[] = ['cc', 'codex', 'gemini', 'opencode', 'aider', 'global']
 
 export function Settings() {
   const { push, pop } = useRouter()

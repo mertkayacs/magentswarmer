@@ -5,11 +5,13 @@
 import { readFileSync, writeFileSync, mkdirSync, renameSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join, dirname } from 'node:path'
-import type { Config, ProviderConfig, Auth, Permissions, Effort } from './types.js'
+import type { Config, Provider, ProviderConfig, Auth, Permissions, Effort } from './types.js'
 
 const SCHEMA_VERSION = 1
 
-const DEFAULT_PROVIDERS: Record<string, ProviderConfig> = {
+const ALL_PROVIDERS: Provider[] = ['cc', 'codex', 'gemini', 'opencode', 'aider']
+
+const DEFAULT_PROVIDERS: Record<Provider, ProviderConfig> = {
   cc: {
     auth: 'subscription',
     base_url: null,
@@ -33,6 +35,22 @@ const DEFAULT_PROVIDERS: Record<string, ProviderConfig> = {
     default_model: null,
     default_permissions: 'skip',
     default_effort: null
+  },
+  opencode: {
+    auth: 'subscription',
+    base_url: null,
+    key_env: null,
+    default_model: null,
+    default_permissions: 'ask',
+    default_effort: null
+  },
+  aider: {
+    auth: 'api-key',
+    base_url: null,
+    key_env: 'ANTHROPIC_API_KEY',
+    default_model: null,
+    default_permissions: 'ask',
+    default_effort: null
   }
 }
 
@@ -52,13 +70,11 @@ export function configExists(): boolean {
 }
 
 export function defaultConfig(): Config {
+  const providers = {} as Record<Provider, ProviderConfig>
+  for (const p of ALL_PROVIDERS) providers[p] = { ...DEFAULT_PROVIDERS[p] }
   return {
     version: SCHEMA_VERSION,
-    providers: {
-      cc: { ...DEFAULT_PROVIDERS.cc },
-      codex: { ...DEFAULT_PROVIDERS.codex },
-      gemini: { ...DEFAULT_PROVIDERS.gemini }
-    },
+    providers,
     ui: {
       last_used_tag: null,
       last_used_goal: null
@@ -76,13 +92,11 @@ function mergeDefaults(raw: unknown): Config {
   if (typeof raw !== 'object' || raw === null) return defaults
 
   const obj = raw as Record<string, unknown>
+  const mergedProviders = {} as Record<Provider, ProviderConfig>
+  for (const p of ALL_PROVIDERS) mergedProviders[p] = { ...DEFAULT_PROVIDERS[p] }
   const merged: Config = {
     version: typeof obj.version === 'number' ? obj.version : defaults.version,
-    providers: {
-      cc: { ...DEFAULT_PROVIDERS.cc },
-      codex: { ...DEFAULT_PROVIDERS.codex },
-      gemini: { ...DEFAULT_PROVIDERS.gemini }
-    },
+    providers: mergedProviders,
     ui: {
       last_used_tag: null,
       last_used_goal: null
@@ -95,7 +109,7 @@ function mergeDefaults(raw: unknown): Config {
 
   if (typeof obj.providers === 'object' && obj.providers !== null) {
     const provs = obj.providers as Record<string, unknown>
-    for (const key of ['cc', 'codex', 'gemini'] as const) {
+    for (const key of ALL_PROVIDERS) {
       if (typeof provs[key] === 'object' && provs[key] !== null) {
         const p = provs[key] as Record<string, unknown>
         merged.providers[key] = {
@@ -161,8 +175,8 @@ export function saveConfig(cfg: Config): string {
 
 export function getProvider(name: string, cfg?: Config): ProviderConfig {
   const config = cfg || loadConfig()
-  if (name === 'cc' || name === 'codex' || name === 'gemini') {
-    return config.providers[name]
+  if ((ALL_PROVIDERS as string[]).includes(name)) {
+    return config.providers[name as Provider]
   }
   throw new Error(`Unknown provider: ${name}`)
 }
