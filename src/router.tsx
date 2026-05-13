@@ -6,6 +6,8 @@ import React, { createContext, useContext, useState, useCallback } from 'react'
 import { useApp } from 'ink'
 import type { ScreenName, RouterContextValue } from './state/types.js'
 
+import { SessionProvider } from './state/SessionContext.js'
+import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { Welcome } from './screens/Welcome.js'
 import { Home } from './screens/Home.js'
 import { Spawn } from './screens/Spawn.js'
@@ -64,7 +66,11 @@ export function Router() {
 
   return (
     <RouterContext.Provider value={{ screen: current, push, pop, replace }}>
-      {renderScreen(current)}
+      <SessionProvider>
+        <ErrorBoundary>
+          {renderScreen(current)}
+        </ErrorBoundary>
+      </SessionProvider>
     </RouterContext.Provider>
   )
 }
