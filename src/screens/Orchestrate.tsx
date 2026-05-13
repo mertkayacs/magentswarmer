@@ -2,7 +2,7 @@
 // Inputs: form state (pre-filled from last_orchestrate). Outputs: spawned Session[] on submit.
 // Invariant: text fields active on focus (no enter-to-edit); workers need at least 1 entry.
 
-import React, { useState } from 'react'
+import React, { useState, useCallback } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
@@ -38,6 +38,7 @@ export function Orchestrate() {
   const [savePanel, setSavePanel] = useState(false)
   const [presetName, setPresetName] = useState('')
 
+  const [cursor, setCursor] = useState(0)
   const [lo] = useState(() => loadState().last_orchestrate)
   const [goal, setGoal] = useState(lo.goal)
   const [tag, setTag] = useState(lo.tag)
@@ -68,6 +69,38 @@ export function Orchestrate() {
     return (fieldIdx - headerCount()) % 2 === 0 ? 'name' : 'prompt'
   }
 
+  function getTextFieldValue(idx: number): string {
+    if (idx === 0) return goal
+    if (idx === 1) return tag
+    if (idx >= headerCount() && idx < submitIdx) {
+      const wi = workerIdx(idx); const sf = workerSubField(idx)
+      return workers[wi]?.[sf] ?? ''
+    }
+    return ''
+  }
+
+  function moveFocus(newIdx: number) {
+    setFocusIdx(newIdx)
+    if (isTextField(newIdx)) setCursor(getTextFieldValue(newIdx).length)
+  }
+
+  const renderCursor = useCallback((value: string, cur: number): React.ReactNode => {
+    const MAX = 53
+    if (value.length <= MAX) {
+      return <Text>{value.slice(0, cur)}<Text color="#5a96e0">█</Text>{value.slice(cur)}</Text>
+    }
+    const half = Math.floor(MAX / 2)
+    const start = Math.max(0, Math.min(cur - half, value.length - MAX))
+    const end = start + MAX
+    const view = value.slice(start, end)
+    const civ = cur - start
+    return (
+      <Text>
+        {start > 0 ? '…' : ''}{view.slice(0, civ)}<Text color="#5a96e0">█</Text>{view.slice(civ)}{end < value.length ? '…' : ''}
+      </Text>
+    )
+  }, [])
+
   // Save panel text input handler
   useInput((input, key) => {
     if (key.escape) { setSavePanel(false); setPresetName(''); return }
@@ -94,36 +127,54 @@ export function Orchestrate() {
       })
       return
     }
-    if (key.tab) { setFocusIdx(i => Math.min(submitIdx, i + 1)); return }
+    if (key.tab) { moveFocus(Math.min(submitIdx, focusIdx + 1)); return }
 
     if (isTextField(focusIdx)) {
       if (key.escape) { pop(); return }
-      if (key.upArrow) { setFocusIdx(i => Math.max(0, i - 1)); return }
-      if (key.downArrow || key.return) { setFocusIdx(i => Math.min(submitIdx, i + 1)); return }
-      if (key.backspace || key.delete) {
-        if (focusIdx === 0) { setGoal(v => v.slice(0, -1)); return }
-        if (focusIdx === 1) { setTag(v => v.slice(0, -1)); return }
-        if (focusIdx >= headerCount() && focusIdx < submitIdx) {
+      if (key.upArrow) { moveFocus(Math.max(0, focusIdx - 1)); return }
+      if (key.downArrow || key.return) { moveFocus(Math.min(submitIdx, focusIdx + 1)); return }
+      if (key.leftArrow) { setCursor(c => Math.max(0, c - 1)); return }
+      if (key.rightArrow) { setCursor(c => Math.min(getTextFieldValue(focusIdx).length, c + 1)); return }
+      if (key.ctrl && input === 'a') { setCursor(0); return }
+      if (key.ctrl && input === 'e') { setCursor(getTextFieldValue(focusIdx).length); return }
+      if (key.backspace) {
+        if (cursor === 0) return
+        if (focusIdx === 0) setGoal(v => v.slice(0, cursor - 1) + v.slice(cursor))
+        else if (focusIdx === 1) setTag(v => v.slice(0, cursor - 1) + v.slice(cursor))
+        else if (focusIdx >= headerCount() && focusIdx < submitIdx) {
           const wi = workerIdx(focusIdx); const sf = workerSubField(focusIdx)
-          setWorkers(ws => ws.map((w, i) => i === wi ? { ...w, [sf]: w[sf].slice(0, -1) } : w))
+          setWorkers(ws => ws.map((w, i) => i === wi ? { ...w, [sf]: w[sf].slice(0, cursor - 1) + w[sf].slice(cursor) } : w))
+        }
+        setCursor(c => c - 1)
+        return
+      }
+      if (key.delete) {
+        const fv = getTextFieldValue(focusIdx)
+        if (cursor >= fv.length) return
+        if (focusIdx === 0) setGoal(v => v.slice(0, cursor) + v.slice(cursor + 1))
+        else if (focusIdx === 1) setTag(v => v.slice(0, cursor) + v.slice(cursor + 1))
+        else if (focusIdx >= headerCount() && focusIdx < submitIdx) {
+          const wi = workerIdx(focusIdx); const sf = workerSubField(focusIdx)
+          setWorkers(ws => ws.map((w, i) => i === wi ? { ...w, [sf]: w[sf].slice(0, cursor) + w[sf].slice(cursor + 1) } : w))
         }
         return
       }
       if (!key.ctrl && !key.meta && input) {
-        if (focusIdx === 0) { setGoal(v => v + input); return }
-        if (focusIdx === 1) { setTag(v => v + input); return }
-        if (focusIdx >= headerCount() && focusIdx < submitIdx) {
+        if (focusIdx === 0) setGoal(v => v.slice(0, cursor) + input + v.slice(cursor))
+        else if (focusIdx === 1) setTag(v => v.slice(0, cursor) + input + v.slice(cursor))
+        else if (focusIdx >= headerCount() && focusIdx < submitIdx) {
           const wi = workerIdx(focusIdx); const sf = workerSubField(focusIdx)
-          setWorkers(ws => ws.map((w, i) => i === wi ? { ...w, [sf]: w[sf] + input } : w))
+          setWorkers(ws => ws.map((w, i) => i === wi ? { ...w, [sf]: w[sf].slice(0, cursor) + input + w[sf].slice(cursor) } : w))
         }
+        setCursor(c => c + 1)
         return
       }
       return
     }
 
     // Select / submit / worker add/remove
-    if (key.upArrow) { setFocusIdx(i => Math.max(0, i - 1)); return }
-    if (key.downArrow) { setFocusIdx(i => Math.min(submitIdx, i + 1)); return }
+    if (key.upArrow) { moveFocus(Math.max(0, focusIdx - 1)); return }
+    if (key.downArrow) { moveFocus(Math.min(submitIdx, focusIdx + 1)); return }
     if (key.leftArrow) {
       if (focusIdx === 2) setProvider(p => cycle(PROVIDERS, p, -1))
       else if (focusIdx === 3) setAuth(a => cycle(AUTHS, a, -1))
@@ -145,7 +196,7 @@ export function Orchestrate() {
     }
     if (input === 'x' && !result && workers.length > 1) {
       setWorkers(ws => ws.slice(0, -1))
-      setFocusIdx(i => Math.min(i, headerCount() + (workers.length - 2) * 2 + 1))
+      moveFocus(Math.min(focusIdx, headerCount() + (workers.length - 2) * 2 + 1))
       return
     }
     if (key.return && focusIdx === submitIdx) {
@@ -166,12 +217,11 @@ export function Orchestrate() {
 
   function textRow(idx: number, label: string, value: string, placeholder: string) {
     const focused = focusIdx === idx
-    const display = value.length > 55 ? '…' + value.slice(-54) : value
     return (
       <Box>
         <Text color={rowColor(idx)} bold={focused}>{marker(idx)} {label.padEnd(14)}</Text>
         {focused
-          ? <Text>{display}<Text color="#5a96e0">█</Text></Text>
+          ? renderCursor(value, cursor)
           : <Text color={value ? 'white' : 'gray'} dimColor={!value}>{value || placeholder}</Text>
         }
       </Box>
@@ -242,7 +292,7 @@ export function Orchestrate() {
       screen="Orchestrate"
       panes={panes}
       nav={nav}
-      hint="tab/↑↓ navigate  ← → select  enter edit  a add worker  x remove"
+      hint="tab/↑↓ navigate  ← → select/cursor  a add worker  x remove"
       header={
         <Box>
           <Text color="#5a96e0" bold>REEVES AGENTS</Text>

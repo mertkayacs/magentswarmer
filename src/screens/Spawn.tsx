@@ -2,7 +2,7 @@
 // Inputs: form state (pre-filled from last_spawn). Outputs: Session on submit.
 // Invariant: text fields active on focus (no enter-to-edit); useScreenNav disabled on text fields.
 
-import React, { useState, useMemo, useEffect } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { homedir } from 'node:os'
 import { execFileSync } from 'node:child_process'
@@ -32,10 +32,6 @@ function cycle<T>(arr: T[], current: T, dir: 1 | -1): T {
   return arr[(idx + dir + arr.length) % arr.length]
 }
 
-// Show only the tail of long strings so the cursor end stays visible
-function tail(s: string, max = 55): string {
-  return s.length > max ? '…' + s.slice(-(max - 1)) : s
-}
 
 const FIELD_HELP: Record<number, { label: string; text: string }> = {
   0: { label: 'working dir', text: 'directory the agent will start in — defaults to current directory' },
@@ -74,6 +70,7 @@ export function Spawn() {
   const [name, setName] = useState(ls.name ?? '')
   const [nameError, setNameError] = useState('')
   const [remoteControl, setRemoteControl] = useState(false)
+  const [cursor, setCursor] = useState(0)
 
   useEffect(() => {
     if (!spawning) return
@@ -102,13 +99,36 @@ export function Spawn() {
   const nav = useScreenNav(push, pop, isTextField)
   const { cmdMode } = nav
 
-  const currentFieldSetter = useMemo(() => {
-    if (focusIdx === 0) return (fn: (_v: string) => string) => setWorkingDir(fn)
-    if (focusIdx === 3) return (fn: (_v: string) => string) => setTask(fn)
-    if (focusIdx === 6) return (fn: (_v: string) => string) => setModel(fn)
-    if (focusIdx === 7) return (fn: (_v: string) => string) => setTag(fn)
-    return null
-  }, [focusIdx])
+  function getTextFieldValue(idx: number): string {
+    if (idx === 0) return workingDir
+    if (idx === 3) return task
+    if (idx === 6) return model
+    if (idx === 7) return tag
+    if (idx === 8) return name
+    return ''
+  }
+
+  function moveFocus(newIdx: number) {
+    setFocusIdx(newIdx)
+    if (TEXT_FIELDS.has(newIdx)) setCursor(getTextFieldValue(newIdx).length)
+  }
+
+  function renderCursor(value: string, cur: number): React.ReactNode {
+    const MAX = 53
+    if (value.length <= MAX) {
+      return <Text>{value.slice(0, cur)}<Text color="#5a96e0">█</Text>{value.slice(cur)}</Text>
+    }
+    const half = Math.floor(MAX / 2)
+    const start = Math.max(0, Math.min(cur - half, value.length - MAX))
+    const end = start + MAX
+    const view = value.slice(start, end)
+    const civ = cur - start
+    return (
+      <Text>
+        {start > 0 ? '…' : ''}{view.slice(0, civ)}<Text color="#5a96e0">█</Text>{view.slice(civ)}{end < value.length ? '…' : ''}
+      </Text>
+    )
+  }
 
   // Result view keys
   useInput((input, key) => {
@@ -138,35 +158,55 @@ export function Spawn() {
   useInput((input, key) => {
     if (result) return
 
-    // Tab always advances
-    if (key.tab) { setFocusIdx(i => Math.min(TOTAL_FIELDS - 1, i + 1)); return }
+    if (key.tab) { moveFocus(Math.min(TOTAL_FIELDS - 1, focusIdx + 1)); return }
 
     if (isTextField) {
       if (key.escape) { pop(); return }
-      if (key.upArrow) { setFocusIdx(i => Math.max(0, i - 1)); return }
-      if (key.downArrow || key.return) { setFocusIdx(i => Math.min(TOTAL_FIELDS - 1, i + 1)); return }
-      if (key.backspace || key.delete) {
-        if (focusIdx === 8) { setName(v => v.slice(0, -1)); setNameError('') }
-        else currentFieldSetter?.(v => v.slice(0, -1))
+      if (key.upArrow) { moveFocus(Math.max(0, focusIdx - 1)); return }
+      if (key.downArrow || key.return) { moveFocus(Math.min(TOTAL_FIELDS - 1, focusIdx + 1)); return }
+      if (key.leftArrow) { setCursor(c => Math.max(0, c - 1)); return }
+      if (key.rightArrow) { setCursor(c => Math.min(getTextFieldValue(focusIdx).length, c + 1)); return }
+      if (key.ctrl && input === 'a') { setCursor(0); return }
+      if (key.ctrl && input === 'e') { setCursor(getTextFieldValue(focusIdx).length); return }
+      if (key.backspace) {
+        if (cursor === 0) return
+        if (focusIdx === 8) { const next = name.slice(0, cursor - 1) + name.slice(cursor); setName(next); setNameError(validateName(next) || '') }
+        else if (focusIdx === 0) setWorkingDir(v => v.slice(0, cursor - 1) + v.slice(cursor))
+        else if (focusIdx === 3) setTask(v => v.slice(0, cursor - 1) + v.slice(cursor))
+        else if (focusIdx === 6) setModel(v => v.slice(0, cursor - 1) + v.slice(cursor))
+        else if (focusIdx === 7) setTag(v => v.slice(0, cursor - 1) + v.slice(cursor))
+        setCursor(c => c - 1)
+        return
+      }
+      if (key.delete) {
+        const fv = getTextFieldValue(focusIdx)
+        if (cursor >= fv.length) return
+        if (focusIdx === 8) { const next = name.slice(0, cursor) + name.slice(cursor + 1); setName(next); setNameError(validateName(next) || '') }
+        else if (focusIdx === 0) setWorkingDir(v => v.slice(0, cursor) + v.slice(cursor + 1))
+        else if (focusIdx === 3) setTask(v => v.slice(0, cursor) + v.slice(cursor + 1))
+        else if (focusIdx === 6) setModel(v => v.slice(0, cursor) + v.slice(cursor + 1))
+        else if (focusIdx === 7) setTag(v => v.slice(0, cursor) + v.slice(cursor + 1))
         return
       }
       if (!key.ctrl && !key.meta && input) {
         if (focusIdx === 8) {
-          const next = name + input
+          const next = name.slice(0, cursor) + input + name.slice(cursor)
           const err = validateName(next)
-          if (err) setNameError(err)
-          else { setName(next); setNameError('') }
-        } else {
-          currentFieldSetter?.(v => v + input)
-        }
+          if (err) { setNameError(err); return }
+          setName(next); setNameError('')
+        } else if (focusIdx === 0) setWorkingDir(v => v.slice(0, cursor) + input + v.slice(cursor))
+        else if (focusIdx === 3) setTask(v => v.slice(0, cursor) + input + v.slice(cursor))
+        else if (focusIdx === 6) setModel(v => v.slice(0, cursor) + input + v.slice(cursor))
+        else if (focusIdx === 7) setTag(v => v.slice(0, cursor) + input + v.slice(cursor))
+        setCursor(c => c + 1)
         return
       }
       return
     }
 
     // Select / toggle / submit
-    if (key.upArrow) { setFocusIdx(i => Math.max(0, i - 1)); return }
-    if (key.downArrow) { setFocusIdx(i => Math.min(TOTAL_FIELDS - 1, i + 1)); return }
+    if (key.upArrow) { moveFocus(Math.max(0, focusIdx - 1)); return }
+    if (key.downArrow) { moveFocus(Math.min(TOTAL_FIELDS - 1, focusIdx + 1)); return }
     if (key.leftArrow) {
       if (focusIdx === 1) setProvider(p => cycle(PROVIDERS, p, -1))
       else if (focusIdx === 2) setAuth(a => cycle(AUTHS, a, -1))
@@ -219,7 +259,7 @@ export function Spawn() {
       <Box>
         <Text color={rowColor(idx)} bold={focused}>{marker(idx)} {label.padEnd(14)}</Text>
         {focused
-          ? <Text>{tail(value)}<Text color="#5a96e0">█</Text></Text>
+          ? renderCursor(value, cursor)
           : <Text color={value ? 'white' : 'gray'} dimColor={!value}>{value || placeholder}</Text>
         }
       </Box>
@@ -303,7 +343,7 @@ export function Spawn() {
       screen="Spawn"
       panes={panes}
       nav={nav}
-      hint="tab/↑↓ navigate  ← → select  type to edit"
+      hint="tab/↑↓ navigate  ← → select/cursor  ctrl-a/e home/end"
       header={
         <Box>
           <Text color="#5a96e0" bold>REEVES AGENTS</Text>
