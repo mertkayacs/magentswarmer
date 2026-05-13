@@ -7,7 +7,8 @@ import { Box, Text, useInput } from 'ink'
 import chalk from 'chalk'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
-import { CommandPicker } from '../components/CommandPicker.js'
+import { usePanes } from '../hooks/usePanes.js'
+import { ScreenLayout } from '../components/ScreenLayout.js'
 import { detectAvailable } from '../launcher/providers.js'
 import { gradientChars, REEVES_ART, AGENTS_ART, GRADIENT_STOPS } from '../brand/banner.js'
 
@@ -15,7 +16,9 @@ let splashShown = false
 
 export function Welcome() {
   const { push } = useRouter()
-  const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = useScreenNav(push, () => {})
+  const panes = usePanes()
+  const nav = useScreenNav(push, () => {})
+  const { cmdMode } = nav
 
   useEffect(() => {
     if (splashShown) {
@@ -57,7 +60,12 @@ export function Welcome() {
   }, [])
 
   return (
-    <Box flexDirection="column" paddingX={1}>
+    <ScreenLayout
+      screen="Welcome"
+      panes={panes}
+      nav={nav}
+      hint="any key to skip"
+    >
       <Box flexGrow={1} flexDirection="column" justifyContent="center">
         <Box flexDirection="column" alignItems="center">
           {reevesLines.map((line, i) => (
@@ -74,18 +82,7 @@ export function Welcome() {
             <Text color="#6e7681" dimColor>spawn  ·  watch  ·  jump</Text>
           </Box>
         </Box>
-
-        <CommandPicker completions={completions} selectedIdx={selectedIdx} />
       </Box>
-
-      <Box flexDirection="column">
-        {cmdError && <Box paddingLeft={1}><Text color="red">{cmdError}</Text></Box>}
-        <Box borderStyle="round" borderColor={cmdMode ? '#5a96e0' : 'gray'} paddingLeft={1} paddingRight={1}>
-          <Text color="gray">/ </Text>
-          <Text>{cmdMode ? cmdValue : ''}</Text>
-          {!cmdMode && <Text color="#6e7681" dimColor>any key to skip</Text>}
-        </Box>
-      </Box>
-    </Box>
+    </ScreenLayout>
   )
 }
