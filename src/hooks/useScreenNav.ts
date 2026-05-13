@@ -56,13 +56,11 @@ export function useScreenNav(
   const [cmdError, setCmdError] = useState('')
   const [selectedIdx, setSelectedIdx] = useState(0)
 
-  const completions = useMemo(
-    () =>
-      cmdValue.length > 0
-        ? DEDUPED_ROUTES.filter(r => r.primary.startsWith('/' + cmdValue))
-        : [],
-    [cmdValue],
-  )
+  const completions = useMemo(() => {
+    if (!cmdMode) return []
+    if (cmdValue.length === 0) return DEDUPED_ROUTES
+    return DEDUPED_ROUTES.filter(r => r.primary.startsWith('/' + cmdValue))
+  }, [cmdMode, cmdValue])
 
   useInput(
     (input, key) => {

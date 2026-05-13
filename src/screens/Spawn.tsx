@@ -1,6 +1,6 @@
 // Spawn a single agent session. Form with working_dir/provider/auth/task/effort/permissions/model/tag.
 // Inputs: form state (pre-filled from last_spawn). Outputs: Session on submit.
-// Invariant: useScreenNav disabled while a text field is being edited; RC URL polled after spawn.
+// Invariant: text fields active on focus (no enter-to-edit); useScreenNav disabled on text fields.
 
 import React, { useState, useMemo, useEffect } from 'react'
 import { Box, Text, useInput } from 'ink'
@@ -10,7 +10,6 @@ import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
 import { usePanes } from '../hooks/usePanes.js'
 import { ScreenLayout } from '../components/ScreenLayout.js'
-import { FieldHint } from '../components/FieldHint.js'
 import { spawn } from '../launcher/spawn.js'
 import { read } from '../state/registry.js'
 import { loadState } from '../state/store.js'
@@ -18,36 +17,37 @@ import { providerColor } from '../utils/display.js'
 import { validateName } from '../utils/validateName.js'
 import type { Provider, Auth, Effort, Permissions, Session } from '../state/types.js'
 
-const PROVIDERS: Provider[] = ['cc', 'codex', 'gemini', 'opencode', 'aider']
+const PROVIDERS: Provider[] = ['cc', 'codex', 'gemini', 'opencode', 'aider', 'hermes']
 const AUTHS: Auth[] = ['subscription', 'api-key', 'custom']
 const EFFORTS: Array<Effort | null> = [null, 'low', 'medium', 'high']
 const PERMS: Permissions[] = ['ask', 'skip']
 const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
 
-// Field indices: 0=working_dir, 1=provider, 2=auth, 3=task, 4=effort, 5=permissions, 6=model, 7=tag, 8=name, 9=remote_ctrl, 10=submit
+// 0=working_dir 1=provider 2=auth 3=task 4=effort 5=permissions 6=model 7=tag 8=name 9=remote_ctrl 10=submit
 const TOTAL_FIELDS = 11
-const TEXT_FIELDS = [0, 3, 6, 7, 8]
+const TEXT_FIELDS = new Set([0, 3, 6, 7, 8])
 
 function cycle<T>(arr: T[], current: T, dir: 1 | -1): T {
   const idx = arr.indexOf(current)
   return arr[(idx + dir + arr.length) % arr.length]
 }
 
-function effortLabel(e: string | null): string {
-  return e ?? '—'
+// Show only the tail of long strings so the cursor end stays visible
+function tail(s: string, max = 55): string {
+  return s.length > max ? '…' + s.slice(-(max - 1)) : s
 }
 
 const FIELD_HELP: Record<number, { label: string; text: string }> = {
   0: { label: 'working dir', text: 'directory the agent will start in — defaults to current directory' },
-  1: { label: 'provider', text: 'cc = Claude Code  codex = OpenAI Codex  gemini = Gemini CLI\nopencode = OpenCode  aider = Aider' },
+  1: { label: 'provider', text: 'cc = Claude Code  codex = OpenAI Codex  gemini = Gemini CLI\nopencode = OpenCode  aider = Aider  hermes = Hermes (NousResearch)' },
   2: { label: 'auth', text: 'subscription = your plan  api-key = env var  custom = proxy/self-hosted' },
-  3: { label: 'task', text: 'what should the agent do? the more specific the better' },
+  3: { label: 'task', text: 'what should the agent do? leave blank for interactive session' },
   4: { label: 'effort', text: 'high = more thinking/tokens  low = faster/cheaper  — = default\ncc + codex only (opencode/aider ignore this field)' },
   5: { label: 'permissions', text: 'skip = agent acts without asking  ask = agent asks before each tool call' },
   6: { label: 'model', text: 'leave blank for provider default  e.g. opus, sonnet-4, gemini-2.0-flash' },
   7: { label: 'tag', text: 'optional label for grouping sessions  e.g. feature-auth, bugfix-race' },
   8: { label: 'name', text: 'optional session name override  alphanumeric, dash, underscore  max 30 chars' },
-  9: { label: 'remote ctrl', text: 'enable remote control URL (CC only) — starts a web session for watching the agent in real time' },
+  9: { label: 'remote ctrl', text: 'enable remote control URL (CC only) — starts a web session for watching the agent' },
   10: { label: 'launch', text: 'press enter to spawn the agent in a new tmux window' },
 }
 
@@ -55,7 +55,6 @@ export function Spawn() {
   const { push, pop } = useRouter()
   const panes = usePanes()
   const [focusIdx, setFocusIdx] = useState(0)
-  const [editing, setEditing] = useState(false)
   const [result, setResult] = useState<Session | null>(null)
   const [rcRequested, setRcRequested] = useState(false)
   const [error, setError] = useState('')
@@ -76,50 +75,44 @@ export function Spawn() {
   const [nameError, setNameError] = useState('')
   const [remoteControl, setRemoteControl] = useState(false)
 
-  // Spinner for spawn-in-progress
   useEffect(() => {
     if (!spawning) return
-    const interval = setInterval(() => setSpawnSpinIdx(i => (i + 1) % SPINNER.length), 80)
-    return () => clearInterval(interval)
+    const id = setInterval(() => setSpawnSpinIdx(i => (i + 1) % SPINNER.length), 80)
+    return () => clearInterval(id)
   }, [spawning])
 
-  // Spinner while waiting for RC URL
   useEffect(() => {
     if (!result || result.rc_url) return
-    const interval = setInterval(() => setSpinIdx(i => (i + 1) % SPINNER.length), 100)
-    return () => clearInterval(interval)
+    const id = setInterval(() => setSpinIdx(i => (i + 1) % SPINNER.length), 100)
+    return () => clearInterval(id)
   }, [result?.id, result?.rc_url])
 
-  // Poll for RC URL after spawn
   useEffect(() => {
     if (!result || result.rc_url || !rcRequested) return
-    const interval = setInterval(() => {
+    const id = setInterval(() => {
       try {
         const fresh = read(result.id)
         if (fresh.rc_url) setResult(fresh)
-      } catch { /* registry miss, keep polling */ }
+      } catch { /* registry miss */ }
     }, 500)
-    return () => clearInterval(interval)
+    return () => clearInterval(id)
   }, [result?.id, result?.rc_url, rcRequested])
 
-  const isTextField = TEXT_FIELDS.includes(focusIdx)
-  const fieldFocused = editing && isTextField
-  const nav = useScreenNav(push, pop, fieldFocused)
-  const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = nav
+  const isTextField = TEXT_FIELDS.has(focusIdx)
+  const nav = useScreenNav(push, pop, isTextField)
+  const { cmdMode } = nav
 
   const currentFieldSetter = useMemo(() => {
     if (focusIdx === 0) return (fn: (_v: string) => string) => setWorkingDir(fn)
     if (focusIdx === 3) return (fn: (_v: string) => string) => setTask(fn)
     if (focusIdx === 6) return (fn: (_v: string) => string) => setModel(fn)
     if (focusIdx === 7) return (fn: (_v: string) => string) => setTag(fn)
-    if (focusIdx === 8) return (fn: (_v: string) => string) => setName(fn)
     return null
   }, [focusIdx])
 
-  // Result view keyboard handler
+  // Result view keys
   useInput((input, key) => {
-    if (!result) return
-    if (cmdMode) return
+    if (!result || cmdMode) return
     if (input === 'a') {
       if (process.env.TMUX) {
         try {
@@ -141,37 +134,39 @@ export function Spawn() {
     if (input === 'l') { push('Sessions'); return }
   }, { isActive: !!result && !cmdMode })
 
-  // Text input handler
+  // Main form handler — text fields accept input on focus, no enter-to-edit step
   useInput((input, key) => {
-    if (!currentFieldSetter) return
-    if (key.escape || key.return) {
-      setEditing(false)
-      if (key.return && focusIdx < TOTAL_FIELDS - 1) setFocusIdx(i => i + 1)
-      return
-    }
-    if (key.backspace || key.delete) {
-      if (focusIdx === 8) { setName(v => v.slice(0, -1)); setNameError(''); }
-      else currentFieldSetter(v => v.slice(0, -1))
-      return
-    }
-    if (!key.ctrl && !key.meta) {
-      if (focusIdx === 8) {
-        const next = name + input
-        const err = validateName(next)
-        if (err) setNameError(err)
-        else { setName(next); setNameError('') }
-      } else {
-        currentFieldSetter(v => v + input)
-      }
-    }
-  }, { isActive: fieldFocused })
-
-  // Navigation handler (form view only)
-  useInput((input, key) => {
-    void input
     if (result) return
-    if (key.tab || key.downArrow) { setFocusIdx(i => Math.min(TOTAL_FIELDS - 1, i + 1)); return }
+
+    // Tab always advances
+    if (key.tab) { setFocusIdx(i => Math.min(TOTAL_FIELDS - 1, i + 1)); return }
+
+    if (isTextField) {
+      if (key.escape) { pop(); return }
+      if (key.upArrow) { setFocusIdx(i => Math.max(0, i - 1)); return }
+      if (key.downArrow || key.return) { setFocusIdx(i => Math.min(TOTAL_FIELDS - 1, i + 1)); return }
+      if (key.backspace || key.delete) {
+        if (focusIdx === 8) { setName(v => v.slice(0, -1)); setNameError('') }
+        else currentFieldSetter?.(v => v.slice(0, -1))
+        return
+      }
+      if (!key.ctrl && !key.meta && input) {
+        if (focusIdx === 8) {
+          const next = name + input
+          const err = validateName(next)
+          if (err) setNameError(err)
+          else { setName(next); setNameError('') }
+        } else {
+          currentFieldSetter?.(v => v + input)
+        }
+        return
+      }
+      return
+    }
+
+    // Select / toggle / submit
     if (key.upArrow) { setFocusIdx(i => Math.max(0, i - 1)); return }
+    if (key.downArrow) { setFocusIdx(i => Math.min(TOTAL_FIELDS - 1, i + 1)); return }
     if (key.leftArrow) {
       if (focusIdx === 1) setProvider(p => cycle(PROVIDERS, p, -1))
       else if (focusIdx === 2) setAuth(a => cycle(AUTHS, a, -1))
@@ -188,76 +183,59 @@ export function Spawn() {
       else if (focusIdx === 9 && provider === 'cc') setRemoteControl(rc => !rc)
       return
     }
-    if (key.return) {
-      if (isTextField) { setEditing(true); return }
-      if (focusIdx === TOTAL_FIELDS - 1) {
-        if (!task.trim()) { setError('task is required'); return }
-        setError('')
-        setSpawning(true)
-        setSpawnSpinIdx(0)
-        const rcEnabled = remoteControl && provider === 'cc'
-        try {
-          const session = spawn({
-            provider,
-            auth,
-            model: model || undefined,
-            permissions,
-            effort,
-            tag: tag || undefined,
-            start_prompt: task,
-            working_dir: workingDir || undefined,
-            name: name || undefined,
-            remote_control: rcEnabled || undefined,
-          })
-          setRcRequested(rcEnabled)
-          setResult(session)
-          setSpawning(false)
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'spawn failed')
-          setSpawning(false)
-        }
+    if (key.return && focusIdx === TOTAL_FIELDS - 1) {
+      setError('')
+      setSpawning(true)
+      setSpawnSpinIdx(0)
+      const rcEnabled = remoteControl && provider === 'cc'
+      try {
+        const session = spawn({
+          provider, auth,
+          model: model || undefined,
+          permissions, effort,
+          tag: tag || undefined,
+          start_prompt: task || undefined,
+          working_dir: workingDir || undefined,
+          name: name || undefined,
+          remote_control: rcEnabled || undefined,
+        })
+        setRcRequested(rcEnabled)
+        setResult(session)
+        setSpawning(false)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'spawn failed')
+        setSpawning(false)
       }
+      return
     }
-  }, { isActive: !fieldFocused && !cmdMode })
+  }, { isActive: !cmdMode })
 
   function rowColor(idx: number) { return focusIdx === idx ? '#5a96e0' : 'gray' }
   function marker(idx: number) { return focusIdx === idx ? '>' : ' ' }
 
-  function selectRow(idx: number, label: string, options: (string | null)[], value: string | null, labelFn = (v: string | null) => v ?? '—') {
+  function textRow(idx: number, label: string, value: string, placeholder: string) {
     const focused = focusIdx === idx
     return (
       <Box>
         <Text color={rowColor(idx)} bold={focused}>{marker(idx)} {label.padEnd(14)}</Text>
-        {options.map((opt, i) => (
-          <React.Fragment key={String(opt)}>
-            {i > 0 && <Text color="gray"> </Text>}
-            <Text
-              color={value === opt ? (opt === 'cc' || opt === 'codex' || opt === 'gemini' ? providerColor(opt as Provider) : '#7eb8f5') : 'gray'}
-              bold={value === opt}
-            >
-              {labelFn(opt)}
-            </Text>
-          </React.Fragment>
-        ))}
-        {focused && <Text color="gray" dimColor>  ← →</Text>}
+        {focused
+          ? <Text>{tail(value)}<Text color="#5a96e0">█</Text></Text>
+          : <Text color={value ? 'white' : 'gray'} dimColor={!value}>{value || placeholder}</Text>
+        }
       </Box>
     )
   }
 
-  function textRow(idx: number, label: string, value: string, placeholder: string) {
+  function selectRow(idx: number, label: string, value: string | null, colorFn?: (_v: string | null) => string, labelFn?: (_v: string | null) => string) {
     const focused = focusIdx === idx
-    const active = focused && editing
+    const displayVal = labelFn ? labelFn(value) : (value ?? '—')
+    const displayColor = colorFn ? colorFn(value) : '#7eb8f5'
     return (
-      <Box flexDirection="column">
-        <Box>
-          <Text color={rowColor(idx)} bold={focused}>{marker(idx)} {label.padEnd(14)}</Text>
-          {active ? (
-            <Text>{value}<Text color="#5a96e0">█</Text></Text>
-          ) : (
-            <Text color={value ? 'white' : 'gray'} dimColor={!value}>{value || placeholder}</Text>
-          )}
-        </Box>
-        {focused && !active && <FieldHint text="press enter to edit" />}
+      <Box>
+        <Text color={rowColor(idx)} bold={focused}>{marker(idx)} {label.padEnd(14)}</Text>
+        {focused && <Text color="gray" dimColor>{'← '}</Text>}
+        <Text color={displayColor} bold={focused}>{displayVal}</Text>
+        {focused && <Text color="gray" dimColor>{' →'}</Text>}
       </Box>
     )
   }
@@ -325,7 +303,7 @@ export function Spawn() {
       screen="Spawn"
       panes={panes}
       nav={nav}
-      hint="tab/↑↓ navigate  ← → select  enter edit/submit"
+      hint="tab/↑↓ navigate  ← → select  type to edit"
       header={
         <Box>
           <Text color="#5a96e0" bold>REEVES AGENTS</Text>
@@ -353,11 +331,11 @@ export function Spawn() {
       ) : (
         <Box flexDirection="column" marginBottom={1}>
           {textRow(0, 'working dir', workingDir, process.cwd())}
-          {selectRow(1, 'provider', PROVIDERS, provider, v => v ?? '—')}
-          {selectRow(2, 'auth', AUTHS, auth)}
-          {textRow(3, 'task', task, '(required) what should the agent do?')}
-          {selectRow(4, 'effort', EFFORTS, effort, effortLabel)}
-          {selectRow(5, 'permissions', PERMS, permissions)}
+          {selectRow(1, 'provider', provider, p => p ? providerColor(p as Provider) : 'gray')}
+          {selectRow(2, 'auth', auth)}
+          {textRow(3, 'task', task, '(optional) leave blank for interactive session')}
+          {selectRow(4, 'effort', effort, undefined, v => v ?? '—')}
+          {selectRow(5, 'permissions', permissions)}
           {textRow(6, 'model', model, '(optional) leave blank for default')}
           {textRow(7, 'tag', tag, '(optional) e.g. feature-branch')}
           {textRow(8, 'name', name, '(optional) override session name')}
@@ -366,10 +344,9 @@ export function Spawn() {
             <Text color={rowColor(9)} bold={focusIdx === 9}>{marker(9)} {'remote ctrl'.padEnd(14)}</Text>
             {provider === 'cc' ? (
               <>
-                <Text color={!remoteControl ? '#7eb8f5' : 'gray'} bold={!remoteControl}>off</Text>
-                <Text color="gray"> </Text>
-                <Text color={remoteControl ? '#7eb8f5' : 'gray'} bold={remoteControl}>on</Text>
-                {focusIdx === 9 && <Text color="gray" dimColor>  ← →</Text>}
+                {focusIdx === 9 && <Text color="gray" dimColor>{'← '}</Text>}
+                <Text color="#7eb8f5" bold={focusIdx === 9}>{remoteControl ? 'on' : 'off'}</Text>
+                {focusIdx === 9 && <Text color="gray" dimColor>{' →'}</Text>}
               </>
             ) : (
               <Text color="gray" dimColor>off  (cc only)</Text>

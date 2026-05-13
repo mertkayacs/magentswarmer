@@ -1,6 +1,6 @@
 // Fan-out wizard: goal, shared provider config, worker list, orchestrate.
 // Inputs: form state (pre-filled from last_orchestrate). Outputs: spawned Session[] on submit.
-// Invariant: useScreenNav disabled while editing; workers need at least 1 entry.
+// Invariant: text fields active on focus (no enter-to-edit); workers need at least 1 entry.
 
 import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
@@ -8,13 +8,12 @@ import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
 import { usePanes } from '../hooks/usePanes.js'
 import { ScreenLayout } from '../components/ScreenLayout.js'
-import { FieldHint } from '../components/FieldHint.js'
 import { providerColor } from '../utils/display.js'
 import { orchestrate } from '../launcher/orchestrate.js'
 import { loadState, addPreset } from '../state/store.js'
 import type { Provider, Auth, Effort, Permissions, Session, WorkerEntry, SharedFormState } from '../state/types.js'
 
-const PROVIDERS: Provider[] = ['cc', 'codex', 'gemini', 'opencode', 'aider']
+const PROVIDERS: Provider[] = ['cc', 'codex', 'gemini', 'opencode', 'aider', 'hermes']
 const AUTHS: Auth[] = ['subscription', 'api-key', 'custom']
 const EFFORTS: Array<Effort | null> = [null, 'low', 'medium', 'high']
 const PERMS: Permissions[] = ['ask', 'skip']
@@ -34,7 +33,6 @@ export function Orchestrate() {
   const { push, pop } = useRouter()
   const panes = usePanes()
   const [focusIdx, setFocusIdx] = useState(0)
-  const [editing, setEditing] = useState(false)
   const [result, setResult] = useState<Session[] | null>(null)
   const [error, setError] = useState('')
   const [savePanel, setSavePanel] = useState(false)
@@ -58,7 +56,7 @@ export function Orchestrate() {
     return false
   }
 
-  const fieldFocused = (editing && isTextField(focusIdx)) || savePanel
+  const fieldFocused = isTextField(focusIdx) || savePanel
   const nav = useScreenNav(push, pop, fieldFocused)
   const { cmdMode, cmdValue, cmdError, completions, selectedIdx } = nav
 
@@ -86,35 +84,7 @@ export function Orchestrate() {
     if (!key.ctrl && !key.meta) setPresetName(v => v + input)
   }, { isActive: savePanel && !!result })
 
-  // Text input handler
-  useInput((input, key) => {
-    if (key.escape || key.return) {
-      setEditing(false)
-      if (key.return && focusIdx < submitIdx) setFocusIdx(i => i + 1)
-      return
-    }
-    if (key.backspace || key.delete) {
-      if (focusIdx === 0) { setGoal(v => v.slice(0, -1)); return }
-      if (focusIdx === 1) { setTag(v => v.slice(0, -1)); return }
-      if (focusIdx >= headerCount() && focusIdx < submitIdx) {
-        const wi = workerIdx(focusIdx)
-        const sf = workerSubField(focusIdx)
-        setWorkers(ws => ws.map((w, i) => i === wi ? { ...w, [sf]: w[sf].slice(0, -1) } : w))
-      }
-      return
-    }
-    if (!key.ctrl && !key.meta) {
-      if (focusIdx === 0) { setGoal(v => v + input); return }
-      if (focusIdx === 1) { setTag(v => v + input); return }
-      if (focusIdx >= headerCount() && focusIdx < submitIdx) {
-        const wi = workerIdx(focusIdx)
-        const sf = workerSubField(focusIdx)
-        setWorkers(ws => ws.map((w, i) => i === wi ? { ...w, [sf]: w[sf] + input } : w))
-      }
-    }
-  }, { isActive: fieldFocused })
-
-  // Navigation handler
+  // Main form handler — text fields active on focus, no enter-to-edit step
   useInput((input, key) => {
     if (key.tab && result !== null) {
       setSavePanel(v => {
@@ -124,8 +94,36 @@ export function Orchestrate() {
       })
       return
     }
-    if (key.tab || key.downArrow) { setFocusIdx(i => Math.min(submitIdx, i + 1)); return }
+    if (key.tab) { setFocusIdx(i => Math.min(submitIdx, i + 1)); return }
+
+    if (isTextField(focusIdx)) {
+      if (key.escape) { pop(); return }
+      if (key.upArrow) { setFocusIdx(i => Math.max(0, i - 1)); return }
+      if (key.downArrow || key.return) { setFocusIdx(i => Math.min(submitIdx, i + 1)); return }
+      if (key.backspace || key.delete) {
+        if (focusIdx === 0) { setGoal(v => v.slice(0, -1)); return }
+        if (focusIdx === 1) { setTag(v => v.slice(0, -1)); return }
+        if (focusIdx >= headerCount() && focusIdx < submitIdx) {
+          const wi = workerIdx(focusIdx); const sf = workerSubField(focusIdx)
+          setWorkers(ws => ws.map((w, i) => i === wi ? { ...w, [sf]: w[sf].slice(0, -1) } : w))
+        }
+        return
+      }
+      if (!key.ctrl && !key.meta && input) {
+        if (focusIdx === 0) { setGoal(v => v + input); return }
+        if (focusIdx === 1) { setTag(v => v + input); return }
+        if (focusIdx >= headerCount() && focusIdx < submitIdx) {
+          const wi = workerIdx(focusIdx); const sf = workerSubField(focusIdx)
+          setWorkers(ws => ws.map((w, i) => i === wi ? { ...w, [sf]: w[sf] + input } : w))
+        }
+        return
+      }
+      return
+    }
+
+    // Select / submit / worker add/remove
     if (key.upArrow) { setFocusIdx(i => Math.max(0, i - 1)); return }
+    if (key.downArrow) { setFocusIdx(i => Math.min(submitIdx, i + 1)); return }
     if (key.leftArrow) {
       if (focusIdx === 2) setProvider(p => cycle(PROVIDERS, p, -1))
       else if (focusIdx === 3) setAuth(a => cycle(AUTHS, a, -1))
@@ -150,62 +148,46 @@ export function Orchestrate() {
       setFocusIdx(i => Math.min(i, headerCount() + (workers.length - 2) * 2 + 1))
       return
     }
-    if (key.return) {
-      if (result) return
-      if (isTextField(focusIdx)) { setEditing(true); return }
-      if (focusIdx === submitIdx) {
-        if (!goal.trim()) { setError('goal is required'); return }
-        if (workers.some(w => !w.prompt.trim())) { setError('all workers need a prompt'); return }
-        setError('')
-        try {
-          const sessions = orchestrate(goal, tag || 'orchestrate', {
-            provider,
-            auth,
-            model: null,
-            permissions,
-            effort,
-          }, workers)
-          setResult(sessions)
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'orchestrate failed')
-        }
+    if (key.return && focusIdx === submitIdx) {
+      if (!goal.trim()) { setError('goal is required'); return }
+      if (workers.some(w => !w.prompt.trim())) { setError('all workers need a prompt'); return }
+      setError('')
+      try {
+        const sessions = orchestrate(goal, tag || 'orchestrate', { provider, auth, model: null, permissions, effort }, workers)
+        setResult(sessions)
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'orchestrate failed')
       }
     }
-  }, { isActive: !fieldFocused && !cmdMode })
+  }, { isActive: !savePanel && !cmdMode })
 
   function rowColor(idx: number) { return focusIdx === idx ? '#5a96e0' : 'gray' }
   function marker(idx: number) { return focusIdx === idx ? '>' : ' ' }
 
   function textRow(idx: number, label: string, value: string, placeholder: string) {
     const focused = focusIdx === idx
-    const active = focused && editing
+    const display = value.length > 55 ? '…' + value.slice(-54) : value
     return (
-      <Box flexDirection="column">
-        <Box>
-          <Text color={rowColor(idx)} bold={focused}>{marker(idx)} {label.padEnd(14)}</Text>
-          {active ? (
-            <Text>{value}<Text color="#5a96e0">█</Text></Text>
-          ) : (
-            <Text color={value ? 'white' : 'gray'} dimColor={!value}>{value || placeholder}</Text>
-          )}
-        </Box>
-        {focused && !active && <FieldHint text="press enter to edit" />}
+      <Box>
+        <Text color={rowColor(idx)} bold={focused}>{marker(idx)} {label.padEnd(14)}</Text>
+        {focused
+          ? <Text>{display}<Text color="#5a96e0">█</Text></Text>
+          : <Text color={value ? 'white' : 'gray'} dimColor={!value}>{value || placeholder}</Text>
+        }
       </Box>
     )
   }
 
-  function selectRow(idx: number, label: string, options: (string | null)[], value: string | null) {
+  function selectRow(idx: number, label: string, value: string | null, colorFn?: (_v: string | null) => string, labelFn?: (_v: string | null) => string) {
     const focused = focusIdx === idx
+    const displayVal = labelFn ? labelFn(value) : (value ?? '—')
+    const displayColor = colorFn ? colorFn(value) : '#7eb8f5'
     return (
       <Box>
         <Text color={rowColor(idx)} bold={focused}>{marker(idx)} {label.padEnd(14)}</Text>
-        {options.map((opt, i) => (
-          <React.Fragment key={String(opt)}>
-            {i > 0 && <Text color="gray"> </Text>}
-            <Text color={value === opt ? '#7eb8f5' : 'gray'} bold={value === opt}>{opt ?? '—'}</Text>
-          </React.Fragment>
-        ))}
-        {focused && <Text color="gray" dimColor>  ← →</Text>}
+        {focused && <Text color="gray" dimColor>{'← '}</Text>}
+        <Text color={displayColor} bold={focused}>{displayVal}</Text>
+        {focused && <Text color="gray" dimColor>{' →'}</Text>}
       </Box>
     )
   }
@@ -279,10 +261,10 @@ export function Orchestrate() {
       <Box flexDirection="column" marginBottom={1}>
         {textRow(0, 'goal', goal, '(required) what is the overall objective?')}
         {textRow(1, 'tag', tag, '(optional) e.g. feature-branch')}
-        {selectRow(2, 'provider', PROVIDERS, provider)}
-        {selectRow(3, 'auth', AUTHS, auth)}
-        {selectRow(4, 'effort', EFFORTS, effort)}
-        {selectRow(5, 'permissions', PERMS, permissions)}
+        {selectRow(2, 'provider', provider, p => p ? providerColor(p as Provider) : 'gray')}
+        {selectRow(3, 'auth', auth)}
+        {selectRow(4, 'effort', effort, undefined, v => v ?? '—')}
+        {selectRow(5, 'permissions', permissions)}
       </Box>
 
       <Box flexDirection="column" marginBottom={1}>
