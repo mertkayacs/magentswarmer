@@ -2,7 +2,7 @@
 // Inputs: form state (pre-filled from last_spawn). Outputs: Session on submit.
 // Invariant: text fields active on focus (no enter-to-edit); useScreenNav disabled on text fields.
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { homedir } from 'node:os'
 import { execFileSync } from 'node:child_process'
@@ -53,6 +53,8 @@ export function Spawn() {
   const [focusIdx, setFocusIdx] = useState(0)
   const [result, setResult] = useState<Session | null>(null)
   const [rcRequested, setRcRequested] = useState(false)
+  const [rcPollGiveUp, setRcPollGiveUp] = useState(false)
+  const rcPollCount = useRef(0)
   const [error, setError] = useState('')
   const [spawning, setSpawning] = useState(false)
   const [spawnSpinIdx, setSpawnSpinIdx] = useState(0)
@@ -79,21 +81,29 @@ export function Spawn() {
   }, [spawning])
 
   useEffect(() => {
-    if (!result || result.rc_url) return
+    if (!result || result.rc_url || rcPollGiveUp) return
     const id = setInterval(() => setSpinIdx(i => (i + 1) % SPINNER.length), 100)
     return () => clearInterval(id)
-  }, [result?.id, result?.rc_url])
+  }, [result?.id, result?.rc_url, rcPollGiveUp])
 
   useEffect(() => {
-    if (!result || result.rc_url || !rcRequested) return
+    if (!result || result.rc_url || !rcRequested || rcPollGiveUp) return
+    rcPollCount.current = 0
+    // Poll for up to 60s (120 × 500ms); give up and surface an error after that.
     const id = setInterval(() => {
+      rcPollCount.current++
+      if (rcPollCount.current > 120) {
+        setRcPollGiveUp(true)
+        clearInterval(id)
+        return
+      }
       try {
         const fresh = read(result.id)
         if (fresh.rc_url) setResult(fresh)
       } catch { /* registry miss */ }
     }, 500)
     return () => clearInterval(id)
-  }, [result?.id, result?.rc_url, rcRequested])
+  }, [result?.id, result?.rc_url, rcRequested, rcPollGiveUp])
 
   const isTextField = TEXT_FIELDS.has(focusIdx)
   const nav = useScreenNav(push, pop, isTextField)
@@ -317,17 +327,19 @@ export function Spawn() {
         </Box>
 
         {rcRequested && (
-          <Box flexDirection="column" borderStyle="round" borderColor={result.rc_url ? 'green' : 'gray'} paddingLeft={1} paddingRight={1} marginBottom={1}>
+          <Box flexDirection="column" borderStyle="round" borderColor={result.rc_url ? 'green' : rcPollGiveUp ? 'yellow' : 'gray'} paddingLeft={1} paddingRight={1} marginBottom={1}>
             <Text color="#4a6fa5">── REMOTE CONTROL ───────────────</Text>
-            {!result.rc_url ? (
-              <Box>
-                <Text color="gray" dimColor>{SPINNER[spinIdx]} </Text>
-                <Text color="gray" dimColor>waiting for URL...</Text>
-              </Box>
-            ) : (
+            {result.rc_url ? (
               <Box>
                 <Text color="green">{result.rc_url}</Text>
                 <Text color="gray" dimColor>  c to copy</Text>
+              </Box>
+            ) : rcPollGiveUp ? (
+              <Text color="yellow">URL not received after 60s — type /remote-control in the session</Text>
+            ) : (
+              <Box>
+                <Text color="gray" dimColor>{SPINNER[spinIdx]} </Text>
+                <Text color="gray" dimColor>waiting for URL...</Text>
               </Box>
             )}
           </Box>

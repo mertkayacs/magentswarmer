@@ -27,10 +27,6 @@ export function useRouter(): RouterContextValue {
   return ctx
 }
 
-function initialStack(): ScreenName[] {
-  return ['Welcome']
-}
-
 function renderScreen(screen: ScreenName) {
   switch (screen) {
     case 'Welcome': return <Welcome />
@@ -46,9 +42,15 @@ function renderScreen(screen: ScreenName) {
   }
 }
 
-export function Router() {
+export interface RouterProps {
+  initialScreen?: ScreenName
+}
+
+export function Router({ initialScreen }: RouterProps = {}) {
   const { exit: _exit } = useApp()
-  const [stack, setStack] = useState<ScreenName[]>(initialStack)
+  const [stack, setStack] = useState<ScreenName[]>(() =>
+    initialScreen ? [initialScreen] : ['Welcome']
+  )
 
   const push = useCallback((screen: ScreenName) => {
     setStack(prev => [...prev, screen])
