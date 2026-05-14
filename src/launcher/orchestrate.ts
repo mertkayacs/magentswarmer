@@ -18,11 +18,33 @@ export function fanOut(requests: SpawnRequest[]): Session[] {
   return sessions
 }
 
+export function buildSpawnRequests(
+  goal: string,
+  tag: string,
+  shared: SharedFormState,
+  workers: WorkerEntry[],
+  working_dir?: string
+): SpawnRequest[] {
+  return workers.map((worker) => ({
+    provider: shared.provider,
+    auth: shared.auth,
+    model: shared.model || undefined,
+    permissions: shared.permissions || 'skip',
+    effort: shared.effort || undefined,
+    name: worker.name,
+    start_prompt: worker.prompt,
+    goal,
+    tag,
+    working_dir,
+  }))
+}
+
 export function orchestrate(
   goal: string,
   tag: string,
   shared: SharedFormState,
-  workers: WorkerEntry[]
+  workers: WorkerEntry[],
+  working_dir?: string
 ): Session[] {
   const requests: SpawnRequest[] = workers.map((worker) => ({
     provider: shared.provider,
@@ -33,7 +55,8 @@ export function orchestrate(
     name: worker.name,
     start_prompt: worker.prompt,
     goal,
-    tag
+    tag,
+    working_dir,
   }))
 
   const sessions = fanOut(requests)

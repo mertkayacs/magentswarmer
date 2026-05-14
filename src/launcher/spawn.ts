@@ -4,7 +4,7 @@
 // Invariant: every session has a unique id and corresponding tmux window.
 
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, writeFileSync, readFileSync } from 'node:fs'
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { SpawnRequest, Session } from '../state/types.js'
@@ -13,6 +13,22 @@ import { registryDir, newId, write as writeSession, nowIso, updateSession } from
 import { setLastSpawn, addRecentSession } from '../state/store.js'
 
 export const TMUX_SESSION = 'reevesagents'
+
+export function expandHome(p: string): string {
+  if (p === '~') return homedir()
+  if (p.startsWith('~/')) return join(homedir(), p.slice(2))
+  return p
+}
+
+// Resolve the working directory for a spawned session.
+// Expands ~, falls back to `fallback` if the path doesn't exist.
+export function resolveWorkingDir(requested: string | undefined, fallback: string): string {
+  if (!requested) return fallback
+  const expanded = expandHome(requested.trim())
+  if (!expanded) return fallback
+  if (existsSync(expanded)) return expanded
+  return fallback
+}
 
 // How long to wait (ms) before sending the initial prompt to a fresh window.
 // The provider CLI needs time to start up and render its initial UI.
@@ -23,7 +39,7 @@ function shellQuote(s: string): string {
   return `'${s.replace(/'/g, "'\\''")}'`
 }
 
-function buildStartScript(
+export function buildStartScript(
   builtEnv: Record<string, string>,
   baseEnv: Record<string, string>,
   cmd: string[]
@@ -73,8 +89,10 @@ export function spawn(req: SpawnRequest): Session {
   const name = req.name || `${req.provider}-${sessionId}`
   const windowName = uniqueWindowName(name, TMUX_SESSION)
 
-  const workdir = join(homedir(), '.reeves', 'spawns', name)
-  mkdirSync(workdir, { recursive: true })
+  // scriptDir holds the start script only; actualWorkdir is where the agent runs.
+  const scriptDir = join(homedir(), '.reeves', 'spawns', name)
+  mkdirSync(scriptDir, { recursive: true })
+  const actualWorkdir = resolveWorkingDir(req.working_dir, process.cwd())
 
   const cfg = {
     provider: req.provider,
@@ -101,13 +119,13 @@ export function spawn(req: SpawnRequest): Session {
     execFileSync('tmux', ['new-session', '-d', '-s', TMUX_SESSION], { stdio: 'ignore' })
   }
 
-  // Create new window — args array avoids all shell quoting issues
-  execFileSync('tmux', ['new-window', '-d', '-t', TMUX_SESSION, '-n', windowName, '-c', workdir], {
+  // Create new window — open in actualWorkdir so the agent sees the project files
+  execFileSync('tmux', ['new-window', '-d', '-t', TMUX_SESSION, '-n', windowName, '-c', actualWorkdir], {
     stdio: 'ignore',
   })
 
-  // Write startup script with correct env and exec into provider CLI
-  const scriptPath = join(workdir, '.start.sh')
+  // Write startup script to scriptDir; the window's CWD is already actualWorkdir
+  const scriptPath = join(scriptDir, '.start.sh')
   writeFileSync(scriptPath, buildStartScript(env, process.env as Record<string, string>, cmd), { mode: 0o755 })
   execFileSync('tmux', ['send-keys', '-t', `${TMUX_SESSION}:${windowName}`, `bash ${shellQuote(scriptPath)}`, 'Enter'], {
     stdio: 'ignore',
@@ -191,7 +209,7 @@ export function spawn(req: SpawnRequest): Session {
     tmux_window: windowName,
     created_at: now,
     last_seen_at: now,
-    working_dir: req.working_dir ?? process.cwd(),
+    working_dir: actualWorkdir,
     ended_at: null,
     rc_url: null,
   }
@@ -208,7 +226,7 @@ export function spawn(req: SpawnRequest): Session {
     tag: req.tag || null,
     name: req.name || null,
     prompt: req.start_prompt || '',
-    working_dir: req.working_dir ?? process.cwd(),
+    working_dir: actualWorkdir,
   })
   addRecentSession(sessionId)
 
