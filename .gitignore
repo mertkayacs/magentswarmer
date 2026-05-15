@@ -13,3 +13,9 @@ coverage/
 .env
 *.tgz
 .superpowers/
+
+# private working notes, internal planning, debug artifacts — never public
+docs/
+specs/
+assets/
+.playwright-mcp/
