@@ -9,12 +9,9 @@ import type { ScreenName, RouterContextValue } from './state/types.js'
 import { SessionProvider } from './state/SessionContext.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { Welcome } from './screens/Welcome.js'
-import { Home } from './screens/Home.js'
+import { TreeNavigator } from './screens/TreeNavigator.js'
 import { Spawn } from './screens/Spawn.js'
 import { Orchestrate } from './screens/Orchestrate.js'
-import { Sessions } from './screens/Sessions.js'
-import { Top } from './screens/Top.js'
-import { History } from './screens/History.js'
 import { Settings } from './screens/Settings.js'
 import { Doctor } from './screens/Doctor.js'
 import { Help } from './screens/Help.js'
@@ -29,16 +26,13 @@ export function useRouter(): RouterContextValue {
 
 function renderScreen(screen: ScreenName) {
   switch (screen) {
-    case 'Welcome': return <Welcome />
-    case 'Home': return <Home />
-    case 'Spawn': return <Spawn />
-    case 'Orchestrate': return <Orchestrate />
-    case 'Sessions': return <Sessions />
-    case 'Top': return <Top />
-    case 'History': return <History />
-    case 'Settings': return <Settings />
-    case 'Doctor': return <Doctor />
-    case 'Help': return <Help />
+    case 'Welcome':        return <Welcome />
+    case 'TreeNavigator':  return <TreeNavigator />
+    case 'Spawn':          return <Spawn />
+    case 'Orchestrate':    return <Orchestrate />
+    case 'Settings':       return <Settings />
+    case 'Doctor':         return <Doctor />
+    case 'Help':           return <Help />
   }
 }
 
@@ -64,7 +58,7 @@ export function Router({ initialScreen }: RouterProps = {}) {
     setStack(prev => [...prev.slice(0, -1), screen])
   }, [])
 
-  const current = stack[stack.length - 1] ?? 'Home'
+  const current = stack[stack.length - 1] ?? 'TreeNavigator'
 
   return (
     <RouterContext.Provider value={{ screen: current, push, pop, replace }}>

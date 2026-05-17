@@ -1,25 +1,25 @@
 // Capture output from a tmux pane for a live session.
 // Inputs: sessionId, optional line count.
-// Outputs: string of last N lines from the pane, or empty string if not found.
-// Invariant: returns empty string on error (session not found, tmux fails).
+// Outputs: ANSI-stripped last N lines from the pane, or empty string on error.
+// Invariant: always returns empty string on error — callers should not throw on peek failure.
 
 import { execFileSync } from 'node:child_process'
+import stripAnsi from 'strip-ansi'
 import { read as readSession } from '../state/registry.js'
+import { redactSecrets } from '../utils/display.js'
 
-export function peek(sessionId: string, lines: number = 20): string {
+export function peek(sessionId: string, lines: number = 10): string {
   try {
     const session = readSession(sessionId)
-    const target = `${session.tmux_session}:${session.tmux_window}`
 
     const output = execFileSync(
-      'tmux', ['capture-pane', '-p', '-t', target],
+      'tmux',
+      // -e: include ANSI escapes (stripped below); -S -N: capture last N lines from pane bottom
+      ['capture-pane', '-p', '-e', '-S', String(-lines), '-t', session.tmux_session],
       { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
     )
 
-    const allLines = output.split('\n')
-    const lastN = allLines.slice(Math.max(0, allLines.length - lines))
-
-    return lastN.join('\n').trim()
+    return redactSecrets(stripAnsi(output).trim())
   } catch {
     return ''
   }

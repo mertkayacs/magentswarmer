@@ -1,233 +1,90 @@
-// Configure providers and global settings.
-// Per-provider sections (auth/key/url/model/effort/perms) + global (tmux name, peek interval).
-// Inputs: loadConfig on mount. Outputs: saves on submit.
-// Invariant: section switch with left/right arrow at save button; field edit with enter in fields.
+// Global config and CLI MCP registration.
+// Inputs: loadConfig() on mount, registerAll() on demand.
+// Outputs: saveConfig() on submit.
+// Invariant: registration is non-destructive and safe to re-run.
 
-import React, { useState, useCallback } from 'react'
+import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
 import { usePanes } from '../hooks/usePanes.js'
 import { ScreenLayout } from '../components/ScreenLayout.js'
 import { loadConfig, saveConfig } from '../state/config.js'
-import type { Auth, Provider, Effort, Permissions } from '../state/types.js'
+import { registerAll } from '../mcp-setup.js'
+import type { CliRegistration } from '../mcp-setup.js'
+import type { Permissions } from '../state/types.js'
 
-const AUTHS: Auth[] = ['subscription', 'api-key', 'custom']
-const EFFORTS: Array<Effort | null> = [null, 'low', 'medium', 'high']
+const PEEK_INTERVALS = [1000, 3000, 5000, 10000]
+const PEEK_LINES = [5, 10, 20, 50]
+const MAX_DEPTHS = [3, 5, 8, 10]
+const MAX_AGENTS_OPTS = [5, 10, 20]
 const PERMS: Permissions[] = ['ask', 'skip']
-const PEEK_INTERVALS = [3, 5, 10] as const
-type PeekInterval = 3 | 5 | 10
 
-const PROVIDER_FIELDS = ['auth', 'key_env', 'base_url', 'default_model', 'default_effort', 'default_permissions'] as const
-type ProviderField = typeof PROVIDER_FIELDS[number]
+// 0=register 1=peek_interval_ms 2=peek_lines 3=max_depth 4=max_agents 5=default_permissions 6=[SAVE]
+const TOTAL_FIELDS = 7
 
-const GLOBAL_FIELDS = ['tmux_session_name', 'peek_interval_seconds'] as const
-type GlobalField = typeof GLOBAL_FIELDS[number]
-
-type Section = Provider | 'global'
-
-function cycle<T>(arr: readonly T[], current: T, dir: 1 | -1): T {
+function cycleArr<T>(arr: T[], current: T, dir: 1 | -1): T {
   const idx = arr.indexOf(current)
-  return arr[(idx + dir + arr.length) % arr.length] as T
+  const i = idx === -1 ? 0 : idx
+  return arr[(i + dir + arr.length) % arr.length]!
 }
-
-function effortLabel(e: Effort | null): string {
-  return e ?? '—'
-}
-
-const SECTIONS: Section[] = ['cc', 'codex', 'gemini', 'opencode', 'aider', 'hermes', 'global']
 
 export function Settings() {
   const { push, pop } = useRouter()
   const panes = usePanes()
+  const [focusIdx, setFocusIdx] = useState(0)
   const [config, setConfig] = useState(() => loadConfig())
-  const [section, setSection] = useState<Section>('cc')
-  const [focusField, setFocusField] = useState(0)
   const [saveMsg, setSaveMsg] = useState('')
-  const [cursor, setCursor] = useState(0)
+  const [registrations, setRegistrations] = useState<CliRegistration[] | null>(null)
+  const [registering, setRegistering] = useState(false)
 
-  const isGlobal = section === 'global'
-  const fields = isGlobal ? GLOBAL_FIELDS : PROVIDER_FIELDS
-  const totalFields = fields.length + 1
-
-  const isTextProvider = (f: ProviderField) => f === 'key_env' || f === 'base_url' || f === 'default_model'
-  const isTextGlobal = (f: GlobalField) => f === 'tmux_session_name'
-  const isTextField = isGlobal
-    ? isTextGlobal(fields[focusField] as GlobalField)
-    : isTextProvider(fields[focusField] as ProviderField)
-  const fieldFocused = isTextField
-
-  const nav = useScreenNav(push, pop, fieldFocused)
+  const nav = useScreenNav(push, pop, false)
   const { cmdMode } = nav
 
-  function getTextFieldValue(): string {
-    if (isGlobal) {
-      return focusField === 0 ? config.global.tmux_session_name : ''
-    }
-    const s = section as Provider
-    const pc = config.providers[s]
-    const f = fields[focusField] as ProviderField
-    if (f === 'key_env') return pc.key_env ?? ''
-    if (f === 'base_url') return pc.base_url ?? ''
-    if (f === 'default_model') return pc.default_model ?? ''
-    return ''
-  }
-
-  function moveFocusField(newIdx: number) {
-    setFocusField(newIdx)
-    const currentIsText = isGlobal
-      ? isTextGlobal(fields[newIdx] as GlobalField)
-      : isTextProvider(fields[newIdx] as ProviderField)
-    if (currentIsText) {
-      const nf = newIdx
-      // compute target value without closure issue — read directly from config
-      if (isGlobal) {
-        setCursor(nf === 0 ? config.global.tmux_session_name.length : 0)
-      } else {
-        const s = section as Provider
-        const pc = config.providers[s]
-        const f = fields[nf] as ProviderField
-        const v = f === 'key_env' ? (pc.key_env ?? '') : f === 'base_url' ? (pc.base_url ?? '') : f === 'default_model' ? (pc.default_model ?? '') : ''
-        setCursor(v.length)
-      }
-    }
-  }
-
-  const renderCursor = useCallback((value: string, cur: number): React.ReactNode => {
-    const MAX = 53
-    if (value.length <= MAX) {
-      return <Text>{value.slice(0, cur)}<Text color="#5a96e0">█</Text>{value.slice(cur)}</Text>
-    }
-    const half = Math.floor(MAX / 2)
-    const start = Math.max(0, Math.min(cur - half, value.length - MAX))
-    const end = start + MAX
-    const view = value.slice(start, end)
-    const civ = cur - start
-    return (
-      <Text>
-        {start > 0 ? '…' : ''}{view.slice(0, civ)}<Text color="#5a96e0">█</Text>{view.slice(civ)}{end < value.length ? '…' : ''}
-      </Text>
-    )
-  }, [])
-
-  function providerFieldVisible(f: ProviderField): boolean {
-    if (section === 'global') return false
-    const pc = config.providers[section as Provider]
-    if (f === 'key_env') return pc.auth === 'api-key' || pc.auth === 'custom'
-    if (f === 'base_url') return pc.auth === 'custom'
-    return true
-  }
-
-  function updateProviderField(field: ProviderField, updater: (_v: string) => string) {
-    if (section === 'global') return
-    const s = section as Provider
-    setConfig(c => ({
-      ...c,
-      providers: {
-        ...c.providers,
-        [s]: { ...c.providers[s], [field]: updater(String(c.providers[s][field] ?? '')) }
-      }
-    }))
-  }
-
-  function updateGlobalText(field: 'tmux_session_name', updater: (_v: string) => string) {
-    setConfig(c => ({
-      ...c,
-      global: { ...c.global, [field]: updater(c.global[field]) }
-    }))
-  }
-
   useInput((input, key) => {
-    if (key.tab) { moveFocusField(Math.min(totalFields - 1, focusField + 1)); return }
+    if (cmdMode) return
+    if (key.tab || key.downArrow) { setFocusIdx(i => Math.min(TOTAL_FIELDS - 1, i + 1)); return }
+    if (key.upArrow) { setFocusIdx(i => Math.max(0, i - 1)); return }
+    if (key.escape) { pop(); return }
 
-    if (isTextField) {
-      if (key.escape) { pop(); return }
-      if (key.upArrow) { moveFocusField(Math.max(0, focusField - 1)); return }
-      if (key.downArrow || key.return) { moveFocusField(Math.min(totalFields - 1, focusField + 1)); return }
-      if (key.leftArrow) { setCursor(c => Math.max(0, c - 1)); return }
-      if (key.rightArrow) { setCursor(c => Math.min(getTextFieldValue().length, c + 1)); return }
-      if (key.ctrl && input === 'a') { setCursor(0); return }
-      if (key.ctrl && input === 'e') { setCursor(getTextFieldValue().length); return }
-      if (key.backspace) {
-        if (cursor === 0) return
-        if (isGlobal) updateGlobalText('tmux_session_name', v => v.slice(0, cursor - 1) + v.slice(cursor))
-        else updateProviderField(fields[focusField] as ProviderField, v => v.slice(0, cursor - 1) + v.slice(cursor))
-        setCursor(c => c - 1)
-        return
-      }
-      if (key.delete) {
-        const fv = getTextFieldValue()
-        if (cursor >= fv.length) return
-        if (isGlobal) updateGlobalText('tmux_session_name', v => v.slice(0, cursor) + v.slice(cursor + 1))
-        else updateProviderField(fields[focusField] as ProviderField, v => v.slice(0, cursor) + v.slice(cursor + 1))
-        return
-      }
-      if (!key.ctrl && !key.meta && input) {
-        if (isGlobal) updateGlobalText('tmux_session_name', v => v.slice(0, cursor) + input + v.slice(cursor))
-        else updateProviderField(fields[focusField] as ProviderField, v => v.slice(0, cursor) + input + v.slice(cursor))
-        setCursor(c => c + 1)
-      }
-      return
-    }
-
-    if (key.upArrow) { moveFocusField(Math.max(0, focusField - 1)); return }
-    if (key.downArrow) { moveFocusField(Math.min(totalFields - 1, focusField + 1)); return }
+    const dir: 1 | -1 = key.leftArrow ? -1 : 1
     if (key.leftArrow || key.rightArrow) {
-      const dir = key.leftArrow ? -1 : 1 as 1 | -1
-      if (focusField === totalFields - 1) {
-        setSection(s => cycle(SECTIONS, s, dir))
-        setFocusField(0)
-        setCursor(0)
-        return
-      }
-      const field = fields[focusField]
-      if (!isGlobal) {
-        const s = section as Provider
-        const pc = config.providers[s]
-        if (field === 'auth') {
-          setConfig(c => ({ ...c, providers: { ...c.providers, [s]: { ...c.providers[s], auth: cycle(AUTHS, pc.auth, dir) } } }))
-        } else if (field === 'default_permissions') {
-          setConfig(c => ({ ...c, providers: { ...c.providers, [s]: { ...c.providers[s], default_permissions: cycle(PERMS, pc.default_permissions, dir) } } }))
-        } else if (field === 'default_effort') {
-          setConfig(c => ({ ...c, providers: { ...c.providers, [s]: { ...c.providers[s], default_effort: cycle(EFFORTS, pc.default_effort, dir) } } }))
-        }
-      } else {
-        if (field === 'peek_interval_seconds') {
-          setConfig(c => ({ ...c, global: { ...c.global, peek_interval_seconds: cycle(PEEK_INTERVALS, c.global.peek_interval_seconds as PeekInterval, dir) } }))
-        }
-      }
+      if (focusIdx === 1) setConfig(c => ({ ...c, global: { ...c.global, peek_interval_ms: cycleArr(PEEK_INTERVALS, c.global.peek_interval_ms, dir) } }))
+      else if (focusIdx === 2) setConfig(c => ({ ...c, global: { ...c.global, peek_lines: cycleArr(PEEK_LINES, c.global.peek_lines, dir) } }))
+      else if (focusIdx === 3) setConfig(c => ({ ...c, global: { ...c.global, max_depth: cycleArr(MAX_DEPTHS, c.global.max_depth, dir) } }))
+      else if (focusIdx === 4) setConfig(c => ({ ...c, global: { ...c.global, max_agents: cycleArr(MAX_AGENTS_OPTS, c.global.max_agents, dir) } }))
+      else if (focusIdx === 5) setConfig(c => ({ ...c, global: { ...c.global, default_permissions: cycleArr(PERMS, c.global.default_permissions, dir) } }))
       return
     }
-    if (key.return && focusField === totalFields - 1) {
-      saveConfig(config)
-      setSaveMsg('saved')
-      setTimeout(() => setSaveMsg(''), 2000)
+
+    if (key.return) {
+      if (focusIdx === 0) {
+        setRegistering(true)
+        const results = registerAll()
+        setRegistrations(results)
+        setRegistering(false)
+        return
+      }
+      if (focusIdx === TOTAL_FIELDS - 1) {
+        saveConfig(config)
+        setSaveMsg('saved')
+        setTimeout(() => setSaveMsg(''), 2000)
+      }
     }
   }, { isActive: !cmdMode })
 
-  const pc = !isGlobal ? config.providers[section as Provider] : null
+  const rowColor = (idx: number) => focusIdx === idx ? '#5a96e0' : 'gray'
+  const marker = (idx: number) => focusIdx === idx ? '>' : ' '
+  const g = config.global
 
-  function renderProviderField(field: ProviderField, idx: number) {
-    if (!providerFieldVisible(field)) return null
-    const isFocused = focusField === idx
-    const pc = config.providers[section as Provider]
-    const label = field.replace(/_/g, ' ').replace(/^default /, '')
-    let valueText = ''
-    if (field === 'auth') valueText = pc.auth
-    else if (field === 'key_env') valueText = pc.key_env ?? ''
-    else if (field === 'base_url') valueText = pc.base_url ?? ''
-    else if (field === 'default_model') valueText = pc.default_model ?? ''
-    else if (field === 'default_effort') valueText = effortLabel(pc.default_effort)
-    else if (field === 'default_permissions') valueText = pc.default_permissions
-    const isActive = isFocused && isTextProvider(field)
+  function selectRow(idx: number, label: string, value: string | number) {
+    const focused = focusIdx === idx
     return (
-      <Box key={field}>
-        <Text color={isFocused ? '#5a96e0' : 'gray'} bold={isFocused}>{(isFocused ? '> ' : '  ') + label.padEnd(14)}</Text>
-        {isActive ? (
-          renderCursor(valueText, cursor)
-        ) : (
-          <Text color={valueText ? 'white' : 'gray'} dimColor={!valueText}>{valueText || '(empty)'}</Text>
-        )}
+      <Box>
+        <Text color={rowColor(idx)} bold={focused}>{marker(idx)} {label.padEnd(24)}</Text>
+        {focused && <Text color="gray" dimColor>{'← '}</Text>}
+        <Text color="#7eb8f5" bold={focused}>{String(value)}</Text>
+        {focused && <Text color="gray" dimColor>{' →'}</Text>}
       </Box>
     )
   }
@@ -237,7 +94,7 @@ export function Settings() {
       screen="Settings"
       panes={panes}
       nav={nav}
-      hint="tab/↑↓ navigate  ← → select/cursor  ctrl-a/e home/end  ← → at save: switch section"
+      hint="↑↓/tab navigate  ← → adjust  enter to act  esc back"
       header={
         <Box>
           <Text color="#5a96e0" bold>REEVES AGENTS</Text>
@@ -245,94 +102,62 @@ export function Settings() {
         </Box>
       }
       rightPanel={
-        panes >= 2 ? (
-          <Box
-            flexDirection="column"
-            width={36}
-            marginLeft={2}
-            borderStyle="round"
-            borderColor="#1e2d3e"
-            paddingLeft={1}
-            paddingRight={1}
-          >
-            <Text color="#4a6fa5">── CURRENT {'─'.repeat(20)}</Text>
-            {!isGlobal && pc && PROVIDER_FIELDS.map(f => {
-              if (!providerFieldVisible(f)) return null
-              let v = ''
-              if (f === 'auth') v = pc.auth
-              else if (f === 'key_env') v = pc.key_env ?? '(empty)'
-              else if (f === 'base_url') v = pc.base_url ?? '(empty)'
-              else if (f === 'default_model') v = pc.default_model ?? '(empty)'
-              else if (f === 'default_effort') v = effortLabel(pc.default_effort)
-              else if (f === 'default_permissions') v = pc.default_permissions
-              return (
-                <Box key={f}>
-                  <Text color="gray" dimColor>{f.replace('default_', '').padEnd(12)}</Text>
-                  <Text color="gray">{v}</Text>
-                </Box>
-              )
-            })}
-            {isGlobal && (
-              <>
-                <Box>
-                  <Text color="gray" dimColor>{'tmux'.padEnd(12)}</Text>
-                  <Text color="gray">{config.global.tmux_session_name}</Text>
-                </Box>
-                <Box>
-                  <Text color="gray" dimColor>{'peek'.padEnd(12)}</Text>
-                  <Text color="gray">{config.global.peek_interval_seconds}s</Text>
-                </Box>
-              </>
-            )}
+        panes >= 2 && registrations ? (
+          <Box flexDirection="column" width={42} marginLeft={2} borderStyle="round" borderColor="#1e2d3e" paddingX={1}>
+            <Text color="#4a6fa5">── CLI REGISTRATION ─────────────</Text>
+            {registrations.map(r => (
+              <Box key={r.cli}>
+                <Text color={r.registered ? 'green' : r.detected ? 'yellow' : 'gray'}>
+                  {r.registered ? '✓' : r.detected ? '!' : '—'}
+                </Text>
+                <Text color="gray">  {r.cli.padEnd(14)}</Text>
+                <Text color={r.registered ? 'green' : 'gray'} dimColor={!r.registered}>
+                  {r.registered ? 'registered' : (r.note ?? 'not found')}
+                </Text>
+              </Box>
+            ))}
           </Box>
         ) : undefined
       }
     >
-      <Box marginBottom={1}>
-        {SECTIONS.map((s, i) => (
-          <React.Fragment key={s}>
-            {i > 0 && <Text color="gray">  </Text>}
-            <Text color={section === s ? '#5a96e0' : 'gray'} bold={section === s} underline={section === s}>{s}</Text>
-          </React.Fragment>
+      <Box flexDirection="column" marginBottom={1}>
+        <Text color="gray" dimColor>── CLI REGISTRATION ────────────</Text>
+        <Box>
+          <Text color={rowColor(0)} bold={focusIdx === 0}>{marker(0)} </Text>
+          <Text color={focusIdx === 0 ? '#5a96e0' : 'gray'} bold={focusIdx === 0}>
+            {registering ? 'detecting...' : '[ DETECT + REGISTER CLIs ]'}
+          </Text>
+          <Text color="gray" dimColor>  (enter)</Text>
+        </Box>
+        {registrations && registrations.map(r => (
+          <Box key={r.cli} paddingLeft={3}>
+            <Text color={r.registered ? 'green' : r.detected ? 'yellow' : 'gray'}>
+              {r.registered ? '✓' : r.detected ? '!' : '—'}
+            </Text>
+            <Text color="gray">  {r.cli.padEnd(14)}</Text>
+            <Text color={r.registered ? 'green' : 'gray'} dimColor={!r.registered}>
+              {r.registered ? 'registered' : (r.note ?? 'not found')}
+            </Text>
+          </Box>
         ))}
       </Box>
 
-      {!isGlobal && pc && (
-        <Box flexDirection="column">
-          {PROVIDER_FIELDS.map((f, i) => renderProviderField(f, i))}
-        </Box>
-      )}
-
-      {isGlobal && (
-        <Box flexDirection="column">
-          <Box>
-            <Text color={focusField === 0 ? '#5a96e0' : 'gray'} bold={focusField === 0}>
-              {(focusField === 0 ? '> ' : '  ') + 'tmux session   '}
-            </Text>
-            {focusField === 0 ? (
-              renderCursor(config.global.tmux_session_name, cursor)
-            ) : (
-              <Text color="white">{config.global.tmux_session_name}</Text>
-            )}
-          </Box>
-          <Box>
-            <Text color={focusField === 1 ? '#5a96e0' : 'gray'} bold={focusField === 1}>
-              {(focusField === 1 ? '> ' : '  ') + 'peek interval  '}
-            </Text>
-            <Text color="white">{config.global.peek_interval_seconds}s</Text>
-            {focusField === 1 && <Text color="gray" dimColor>  ← →</Text>}
-          </Box>
-        </Box>
-      )}
-
-      <Box marginTop={1}>
-        <Text color={focusField === totalFields - 1 ? '#5a96e0' : 'gray'} bold={focusField === totalFields - 1}>
-          {(focusField === totalFields - 1 ? '> ' : '  ') + '[ SAVE ]'}
-        </Text>
-        {focusField === totalFields - 1 && <Text color="gray" dimColor>  ← → switch section</Text>}
+      <Box flexDirection="column" marginBottom={1}>
+        <Text color="gray" dimColor>── GLOBAL CONFIG ───────────────</Text>
+        {selectRow(1, 'peek interval (ms)', g.peek_interval_ms)}
+        {selectRow(2, 'peek lines', g.peek_lines)}
+        {selectRow(3, 'max depth', g.max_depth)}
+        {selectRow(4, 'max agents', g.max_agents)}
+        {selectRow(5, 'default permissions', g.default_permissions)}
       </Box>
 
-      {saveMsg !== '' && <Text color="green">{saveMsg}</Text>}
+      <Box marginTop={1}>
+        <Text color={focusIdx === TOTAL_FIELDS - 1 ? '#5a96e0' : 'gray'} bold={focusIdx === TOTAL_FIELDS - 1}>
+          {marker(TOTAL_FIELDS - 1)} [ SAVE CONFIG ]
+        </Text>
+      </Box>
+
+      {saveMsg && <Text color="green">{saveMsg}</Text>}
     </ScreenLayout>
   )
 }

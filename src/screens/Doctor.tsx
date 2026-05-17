@@ -13,6 +13,16 @@ import type { DoctorResult } from '../launcher/doctor.js'
 import type { Session } from '../state/types.js'
 
 const FIX_HINTS: Record<string, string[]> = {
+  platform: [
+    'Supported targets:',
+    '  macOS',
+    '  Linux',
+    '  Windows via WSL',
+    '',
+    'Native Windows is unsupported',
+    'because reevesagents requires tmux',
+    'and POSIX shell behavior.',
+  ],
   node: [
     'Install via nvm (recommended):',
     '  nvm install --lts',
@@ -39,15 +49,21 @@ const FIX_HINTS: Record<string, string[]> = {
     'Gemini:',
     '  npm i -g @google/gemini-cli',
     '',
-    'OpenCode:',
-    '  npm i -g opencode-ai',
-    '',
-    'Aider:',
-    '  pip install aider-chat',
-    '',
     'Hermes:',
     '  brew install hermes-agent',
     '  pip install hermes-agent',
+  ],
+  'provider compat': [
+    'Installed provider versions differ.',
+    '',
+    'Run provider help to confirm flags:',
+    '  claude --help',
+    '  codex --help',
+    '  gemini --help',
+    '  hermes chat --help',
+    '',
+    'Upgrade the provider CLI if a',
+    'required skip/trust flag is missing.',
   ],
   'state dir': [
     'Create the directory:',

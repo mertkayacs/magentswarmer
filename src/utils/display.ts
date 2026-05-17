@@ -1,5 +1,4 @@
-// Display utilities: provider colors, age formatting, session labels.
-// Inputs: Provider enum, timestamps. Outputs: color strings, formatted strings.
+// Display utilities: provider colors, color capability checks, secret redaction.
 // Invariant: providerColor always returns a valid hex string or named color.
 
 import chalk from 'chalk'
@@ -9,35 +8,8 @@ export function providerColor(p: Provider): string {
   if (p === 'cc') return '#5a96e0'
   if (p === 'codex') return '#4ade80'
   if (p === 'gemini') return '#facc15'
-  if (p === 'opencode') return '#a78bfa'
-  if (p === 'aider') return '#fb923c'
   if (p === 'hermes') return '#f472b6'
   return 'gray'
-}
-
-export function formatAge(isoDate: string): string {
-  const ms = Date.now() - new Date(isoDate).getTime()
-  const s = Math.floor(ms / 1000)
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  if (m < 60) return `${m}m`
-  const h = Math.floor(m / 60)
-  if (h < 24) return `${h}h`
-  return `${Math.floor(h / 24)}d`
-}
-
-export function formatDuration(createdAt: string, endedAt: string): string {
-  const ms = new Date(endedAt).getTime() - new Date(createdAt).getTime()
-  const s = Math.floor(ms / 1000)
-  if (s < 60) return `${s}s`
-  const m = Math.floor(s / 60)
-  if (m < 60) {
-    const rs = s % 60
-    return `${m}m ${rs}s`
-  }
-  const h = Math.floor(m / 60)
-  const rm = m % 60
-  return `${h}h ${rm}m`
 }
 
 export function supportsColor(): boolean {
@@ -46,4 +18,18 @@ export function supportsColor(): boolean {
 
 export function supportsHex(): boolean {
   return chalk.level >= 3
+}
+
+// Ordered: longer prefix patterns must come before shorter ones (e.g. sk-ant before sk-)
+const SECRET_PATTERNS = [
+  /sk-ant-[A-Za-z0-9\-_]{20,}/g,
+  /sk-[A-Za-z0-9\-_]{20,}/g,
+  /AIza[A-Za-z0-9\-_]{35}/g,
+  /gsk_[A-Za-z0-9\-_]{20,}/g,
+]
+
+export function redactSecrets(text: string): string {
+  let result = text
+  for (const pattern of SECRET_PATTERNS) result = result.replace(pattern, '[REDACTED]')
+  return result
 }

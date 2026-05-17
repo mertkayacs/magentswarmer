@@ -22,7 +22,7 @@ export function Welcome() {
 
   useEffect(() => {
     if (splashShown) {
-      push('Home')
+      push('TreeNavigator')
       return
     }
 
@@ -36,7 +36,7 @@ export function Welcome() {
 
     const timer = setTimeout(() => {
       splashShown = true
-      push('Home')
+      push('TreeNavigator')
     }, 5000)
 
     return () => clearTimeout(timer)
@@ -44,7 +44,7 @@ export function Welcome() {
 
   useInput(() => {
     splashShown = true
-    push('Home')
+    push('TreeNavigator')
   }, { isActive: !cmdMode })
 
   const reevesLines = useMemo(() => {

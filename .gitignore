@@ -1,5 +1,6 @@
 .claude/
 node_modules/
+.pnpm-store/
 dist/
 .venv/
 __pycache__/

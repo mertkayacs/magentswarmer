@@ -20,18 +20,22 @@ describe('config global fields', () => {
   it('loads global defaults when config missing', async () => {
     const { loadConfig } = await import('../src/state/config.js')
     const cfg = loadConfig()
-    expect(cfg.global.tmux_session_name).toBe('reevesagents')
-    expect(cfg.global.peek_interval_seconds).toBe(5)
+    expect(cfg.global.peek_interval_ms).toBe(3000)
+    expect(cfg.global.peek_lines).toBe(10)
+    expect(cfg.global.max_depth).toBe(5)
+    expect(cfg.global.max_agents).toBe(10)
+    expect(cfg.global.ready_delay_ms).toBe(2000)
+    expect(cfg.global.default_permissions).toBe('ask')
   })
 
-  it('preserves global config on save', async () => {
+  it('preserves global config on save and reload', async () => {
     const { loadConfig, saveConfig } = await import('../src/state/config.js')
     const cfg = loadConfig()
-    cfg.global.tmux_session_name = 'custom-session'
-    cfg.global.peek_interval_seconds = 10
+    cfg.global.peek_interval_ms = 5000
+    cfg.global.default_permissions = 'ask'
     saveConfig(cfg)
     const reloaded = loadConfig()
-    expect(reloaded.global.tmux_session_name).toBe('custom-session')
-    expect(reloaded.global.peek_interval_seconds).toBe(10)
+    expect(reloaded.global.peek_interval_ms).toBe(5000)
+    expect(reloaded.global.default_permissions).toBe('ask')
   })
 })

@@ -1,10 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import type { Provider } from '../src/state/types.js'
 
-function msAgo(ms: number): string {
-  return new Date(Date.now() - ms).toISOString()
-}
-
 describe('display utilities', () => {
   describe('providerColor', () => {
     it('cc returns blue hex', async () => {
@@ -29,91 +25,51 @@ describe('display utilities', () => {
 
     it('always returns a non-empty string', async () => {
       const { providerColor } = await import('../src/utils/display.js')
-      const providers: Provider[] = ['cc', 'codex', 'gemini']
+      const providers: Provider[] = ['cc', 'codex', 'gemini', 'hermes']
       for (const p of providers) {
         expect(providerColor(p).length).toBeGreaterThan(0)
       }
     })
   })
 
-  describe('formatAge', () => {
-    it('returns seconds for durations under 60s', async () => {
-      const { formatAge } = await import('../src/utils/display.js')
-      expect(formatAge(msAgo(30_000))).toBe('30s')
+  describe('redactSecrets', () => {
+    it('replaces anthropic keys with [REDACTED]', async () => {
+      const { redactSecrets } = await import('../src/utils/display.js')
+      const input = 'auth: sk-ant-api03-abcdef1234567890abcdef1234567890 trailing'
+      expect(redactSecrets(input)).toBe('auth: [REDACTED] trailing')
     })
 
-    it('returns 59s at the second boundary', async () => {
-      const { formatAge } = await import('../src/utils/display.js')
-      expect(formatAge(msAgo(59_000))).toBe('59s')
+    it('replaces openai-shaped keys with [REDACTED]', async () => {
+      const { redactSecrets } = await import('../src/utils/display.js')
+      const input = 'token=sk-proj1234567890abcdefghij1234567890'
+      expect(redactSecrets(input)).toContain('[REDACTED]')
+      expect(redactSecrets(input)).not.toContain('sk-proj')
     })
 
-    it('returns 1m at exactly 60s', async () => {
-      const { formatAge } = await import('../src/utils/display.js')
-      expect(formatAge(msAgo(60_000))).toBe('1m')
+    it('replaces google api keys with [REDACTED]', async () => {
+      const { redactSecrets } = await import('../src/utils/display.js')
+      // pattern requires exactly 35 chars after AIza
+      const input = 'key=AIzaSyA1234567890abcdefghijklmnopqrstuv'
+      expect(redactSecrets(input)).toBe('key=[REDACTED]')
     })
 
-    it('returns minutes for durations under 60m', async () => {
-      const { formatAge } = await import('../src/utils/display.js')
-      expect(formatAge(msAgo(2 * 60_000))).toBe('2m')
-      expect(formatAge(msAgo(30 * 60_000))).toBe('30m')
+    it('replaces groq keys with [REDACTED]', async () => {
+      const { redactSecrets } = await import('../src/utils/display.js')
+      const input = 'GROQ=gsk_abcdefghij1234567890abcdef'
+      expect(redactSecrets(input)).toContain('[REDACTED]')
     })
 
-    it('returns 1h at exactly 3600s', async () => {
-      const { formatAge } = await import('../src/utils/display.js')
-      expect(formatAge(msAgo(3_600_000))).toBe('1h')
+    it('leaves clean text alone', async () => {
+      const { redactSecrets } = await import('../src/utils/display.js')
+      const input = 'just a normal task description'
+      expect(redactSecrets(input)).toBe(input)
     })
 
-    it('returns hours for durations under 24h', async () => {
-      const { formatAge } = await import('../src/utils/display.js')
-      expect(formatAge(msAgo(2 * 3_600_000))).toBe('2h')
-      expect(formatAge(msAgo(12 * 3_600_000))).toBe('12h')
-    })
-
-    it('returns 1d at exactly 24h', async () => {
-      const { formatAge } = await import('../src/utils/display.js')
-      expect(formatAge(msAgo(86_400_000))).toBe('1d')
-    })
-
-    it('returns days for durations 24h+', async () => {
-      const { formatAge } = await import('../src/utils/display.js')
-      expect(formatAge(msAgo(2 * 86_400_000))).toBe('2d')
-      expect(formatAge(msAgo(7 * 86_400_000))).toBe('7d')
-    })
-
-    it('returns negative seconds for future timestamps (no clamping)', async () => {
-      const { formatAge } = await import('../src/utils/display.js')
-      const future = new Date(Date.now() + 5_000).toISOString()
-      // formatAge does not clamp; future dates produce a negative suffix
-      expect(formatAge(future)).toMatch(/^-\d+s$/)
-    })
-  })
-
-  describe('formatDuration', () => {
-    it('seconds only when under 60s', async () => {
-      const { formatDuration } = await import('../src/utils/display.js')
-      const start = '2026-01-01T00:00:00.000Z'
-      const end   = '2026-01-01T00:00:42.000Z'
-      expect(formatDuration(start, end)).toBe('42s')
-    })
-
-    it('minutes and seconds when under 1h', async () => {
-      const { formatDuration } = await import('../src/utils/display.js')
-      const start = '2026-01-01T00:00:00.000Z'
-      const end   = '2026-01-01T00:23:05.000Z'
-      expect(formatDuration(start, end)).toBe('23m 5s')
-    })
-
-    it('hours and minutes when 1h or more', async () => {
-      const { formatDuration } = await import('../src/utils/display.js')
-      const start = '2026-01-01T00:00:00.000Z'
-      const end   = '2026-01-01T03:45:00.000Z'
-      expect(formatDuration(start, end)).toBe('3h 45m')
-    })
-
-    it('zero seconds returns 0s', async () => {
-      const { formatDuration } = await import('../src/utils/display.js')
-      const ts = '2026-01-01T00:00:00.000Z'
-      expect(formatDuration(ts, ts)).toBe('0s')
+    it('is idempotent on already-redacted text', async () => {
+      const { redactSecrets } = await import('../src/utils/display.js')
+      const once = redactSecrets('sk-ant-abcdefghij1234567890abcd')
+      const twice = redactSecrets(once)
+      expect(twice).toBe(once)
     })
   })
 })

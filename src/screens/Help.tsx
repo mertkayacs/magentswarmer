@@ -37,13 +37,13 @@ export function Help() {
             paddingLeft={1}
             paddingRight={1}
           >
-            <Text color="#4a6fa5">── SESSION SHORTCUTS ─────────────────</Text>
+            <Text color="#4a6fa5">── TREE SHORTCUTS ────────────────────</Text>
             <Box flexDirection="column" marginTop={1}>
               <Text color="#7eb8f5">↑ ↓</Text>
               <Text color="gray" dimColor>select session</Text>
             </Box>
             <Box flexDirection="column" marginTop={1}>
-              <Text color="#7eb8f5">a</Text>
+              <Text color="#7eb8f5">Enter</Text>
               <Text color="gray" dimColor>attach to session</Text>
             </Box>
             <Box flexDirection="column" marginTop={1}>
@@ -51,12 +51,12 @@ export function Help() {
               <Text color="gray" dimColor>kill session (confirm y)</Text>
             </Box>
             <Box flexDirection="column" marginTop={1}>
-              <Text color="#7eb8f5">x / X</Text>
-              <Text color="gray" dimColor>delete history / wipe all</Text>
+              <Text color="#7eb8f5">r</Text>
+              <Text color="gray" dimColor>send /remote-control (CC only)</Text>
             </Box>
             <Box flexDirection="column" marginTop={1}>
-              <Text color="#7eb8f5">r</Text>
-              <Text color="gray" dimColor>refresh list</Text>
+              <Text color="#7eb8f5">s / o / d</Text>
+              <Text color="gray" dimColor>spawn / orchestrate / doctor</Text>
             </Box>
           </Box>
         ) : undefined
@@ -80,11 +80,11 @@ export function Help() {
       </Box>
 
       <Box flexDirection="column" marginBottom={1}>
-        <Text color="gray" dimColor>HOME SHORTCUTS</Text>
+        <Text color="gray" dimColor>TREE SHORTCUTS</Text>
         <Box><Text color="#7eb8f5">{'s'.padEnd(14)}</Text><Text color="gray">spawn agent</Text></Box>
-        <Box><Text color="#7eb8f5">{'o'.padEnd(14)}</Text><Text color="gray">orchestrate multi</Text></Box>
-        <Box><Text color="#7eb8f5">{'l'.padEnd(14)}</Text><Text color="gray">list sessions</Text></Box>
-        <Box><Text color="#7eb8f5">{'d'.padEnd(14)}</Text><Text color="gray">doctor health</Text></Box>
+        <Box><Text color="#7eb8f5">{'o'.padEnd(14)}</Text><Text color="gray">orchestrate multi-agent tree</Text></Box>
+        <Box><Text color="#7eb8f5">{'d'.padEnd(14)}</Text><Text color="gray">doctor health check</Text></Box>
+        <Box><Text color="#7eb8f5">{'r'.padEnd(14)}</Text><Text color="gray">remote-control selected CC agent</Text></Box>
       </Box>
     </ScreenLayout>
   )

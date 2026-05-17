@@ -44,10 +44,10 @@ describe('spawn working directory resolution', () => {
       expect(resolveWorkingDir(dir, '/fallback')).toBe(dir)
     })
 
-    it('returns fallback when directory does not exist', async () => {
+    it('throws when requested directory does not exist', async () => {
       const { resolveWorkingDir } = await import('../src/launcher/spawn.js')
       const nonexistent = join(tmpdir(), `nonexistent-${randomInt(0, 1e9)}`)
-      expect(resolveWorkingDir(nonexistent, '/fallback')).toBe('/fallback')
+      expect(() => resolveWorkingDir(nonexistent, '/fallback')).toThrow(/Working directory does not exist/)
     })
 
     it('expands ~ and returns path when expanded dir exists', async () => {

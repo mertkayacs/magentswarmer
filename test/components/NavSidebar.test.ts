@@ -5,14 +5,14 @@ import { NavSidebar } from '../../src/components/NavSidebar.js'
 
 describe('NavSidebar', () => {
   it('renders nothing when panes < 3', () => {
-    const { lastFrame } = render(React.createElement(NavSidebar, { panes: 1, currentScreen: 'Home' }))
+    const { lastFrame } = render(React.createElement(NavSidebar, { panes: 1, currentScreen: 'TreeNavigator' }))
     expect(lastFrame()).toBe('')
   })
 
   it('renders route labels and shortcuts when panes === 3', () => {
-    const { lastFrame } = render(React.createElement(NavSidebar, { panes: 3, currentScreen: 'Home' }))
+    const { lastFrame } = render(React.createElement(NavSidebar, { panes: 3, currentScreen: 'TreeNavigator' }))
     const frame = lastFrame()
-    expect(frame).toContain('home')
+    expect(frame).toContain('tree')
     expect(frame).toContain('spawn')
   })
 
@@ -22,8 +22,8 @@ describe('NavSidebar', () => {
     expect(frame).toContain('>')
   })
 
-  it('displays shortcut keys h, s, o for Home, Spawn, Orchestrate', () => {
-    const { lastFrame } = render(React.createElement(NavSidebar, { panes: 3, currentScreen: 'Home' }))
+  it('displays shortcut keys h, s, o for tree, spawn, orchestrate', () => {
+    const { lastFrame } = render(React.createElement(NavSidebar, { panes: 3, currentScreen: 'TreeNavigator' }))
     const frame = lastFrame()
     expect(frame).toContain('h')
     expect(frame).toContain('s')

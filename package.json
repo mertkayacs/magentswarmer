@@ -1,8 +1,9 @@
 {
   "name": "reevesagents",
-  "version": "3.0.0",
-  "description": "Spawn and orchestrate AI coding CLIs (Claude Code, Codex, Gemini) from one place",
+  "version": "0.9.0",
+  "description": "Compose and run AI CLI trees in tmux",
   "type": "module",
+  "packageManager": "pnpm@11.1.0",
   "bin": {
     "reevesagents": "./dist/cli.js"
   },
@@ -23,10 +24,12 @@
     "lint": "eslint src test"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.0",
     "chalk": "^5.6.2",
     "commander": "^14.0.3",
     "ink": "^7.0.2",
-    "react": "^19.2.6"
+    "react": "^19.2.6",
+    "strip-ansi": "^7.1.0"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,50 +1,48 @@
-// Spawn a single agent session. Form with working_dir/provider/auth/task/effort/permissions/model/tag.
-// Inputs: form state (pre-filled from last_spawn). Outputs: Session on submit.
-// Invariant: text fields active on focus (no enter-to-edit); useScreenNav disabled on text fields.
+// Spawn a single agent. Form: working_dir/provider/task/permissions/model/nickname/rc_enabled.
+// Inputs: form defaults. Outputs: Session on submit.
+// Invariant: text fields always active on focus; useScreenNav disabled during text input.
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState } from 'react'
 import { Box, Text, useInput } from 'ink'
 import { homedir } from 'node:os'
-import { execFileSync } from 'node:child_process'
 import { useRouter } from '../router.js'
 import { useScreenNav } from '../hooks/useScreenNav.js'
 import { usePanes } from '../hooks/usePanes.js'
 import { ScreenLayout } from '../components/ScreenLayout.js'
 import { spawn } from '../launcher/spawn.js'
-import { read } from '../state/registry.js'
-import { loadState } from '../state/store.js'
+import { jumpToSession } from '../launcher/jump.js'
+import { loadLastSpawn, saveLastSpawn } from '../state/store.js'
 import { providerColor } from '../utils/display.js'
-import { validateName } from '../utils/validateName.js'
-import type { Provider, Auth, Effort, Permissions, Session } from '../state/types.js'
+import { PROVIDERS } from '../launcher/providers.js'
+import type { Provider, Permissions, AuthMode, Effort, Session } from '../state/types.js'
 
-const PROVIDERS: Provider[] = ['cc', 'codex', 'gemini', 'opencode', 'aider', 'hermes']
-const AUTHS: Auth[] = ['subscription', 'api-key', 'custom']
-const EFFORTS: Array<Effort | null> = [null, 'low', 'medium', 'high']
 const PERMS: Permissions[] = ['ask', 'skip']
-const SPINNER = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏']
+const AUTH_MODES: AuthMode[] = ['default', 'api-key']
+const EFFORTS: Effort[] = ['default', 'low', 'medium', 'high', 'xhigh', 'max']
+const RC_PROVIDERS = new Set<Provider>(['cc', 'codex'])
+const EFFORT_PROVIDERS = new Set<Provider>(['cc'])
+const AUTH_PROVIDERS = new Set<Provider>(['cc'])
 
-// 0=working_dir 1=provider 2=auth 3=task 4=effort 5=permissions 6=model 7=tag 8=name 9=remote_ctrl 10=submit
-const TOTAL_FIELDS = 11
-const TEXT_FIELDS = new Set([0, 3, 6, 7, 8])
+// 0=working_dir 1=provider 2=task 3=permissions 4=auth 5=effort 6=model 7=nickname 8=rc_enabled 9=submit
+const TOTAL_FIELDS = 10
+const TEXT_FIELDS = new Set([0, 2, 6, 7])
+
+const FIELD_HELP: Record<number, { label: string; text: string }> = {
+  0: { label: 'working dir', text: 'directory the agent starts in — defaults to current directory' },
+  1: { label: 'provider',    text: 'cc=Claude Code  codex=OpenAI Codex  gemini=Gemini CLI  hermes=Hermes' },
+  2: { label: 'task',        text: 'what should the agent do? leave blank for interactive session' },
+  3: { label: 'permissions', text: 'skip = acts without asking (dangerously-skip-permissions)\nask = agent confirms each tool call' },
+  4: { label: 'auth',        text: 'api-key maps to Claude Code --bare; other providers use their own default auth' },
+  5: { label: 'effort',      text: 'Claude Code supports low, medium, high, xhigh, and max' },
+  6: { label: 'model',       text: 'leave blank for provider default, for example claude-opus-4-5' },
+  7: { label: 'nickname',    text: 'short label shown in tree view and tmux session name' },
+  8: { label: 'remote ctrl', text: 'inject /remote-control (CC) or --enable remote_control (Codex) at startup' },
+  9: { label: 'launch',      text: 'press enter to spawn the agent in a new tmux session' },
+}
 
 function cycle<T>(arr: T[], current: T, dir: 1 | -1): T {
   const idx = arr.indexOf(current)
-  return arr[(idx + dir + arr.length) % arr.length]
-}
-
-
-const FIELD_HELP: Record<number, { label: string; text: string }> = {
-  0: { label: 'working dir', text: 'directory the agent will start in — defaults to current directory' },
-  1: { label: 'provider', text: 'cc = Claude Code  codex = OpenAI Codex  gemini = Gemini CLI\nopencode = OpenCode  aider = Aider  hermes = Hermes (NousResearch)' },
-  2: { label: 'auth', text: 'subscription = your plan  api-key = env var  custom = proxy/self-hosted' },
-  3: { label: 'task', text: 'what should the agent do? leave blank for interactive session' },
-  4: { label: 'effort', text: 'high = more thinking/tokens  low = faster/cheaper  — = default\ncc + codex only (opencode/aider ignore this field)' },
-  5: { label: 'permissions', text: 'skip = agent acts without asking  ask = agent asks before each tool call' },
-  6: { label: 'model', text: 'leave blank for provider default  e.g. opus, sonnet-4, gemini-2.0-flash' },
-  7: { label: 'tag', text: 'optional label for grouping sessions  e.g. feature-auth, bugfix-race' },
-  8: { label: 'name', text: 'optional session name override  alphanumeric, dash, underscore  max 30 chars' },
-  9: { label: 'remote ctrl', text: 'enable remote control URL (CC only) — starts a web session for watching the agent' },
-  10: { label: 'launch', text: 'press enter to spawn the agent in a new tmux window' },
+  return arr[(idx + dir + arr.length) % arr.length]!
 }
 
 export function Spawn() {
@@ -52,75 +50,43 @@ export function Spawn() {
   const panes = usePanes()
   const [focusIdx, setFocusIdx] = useState(0)
   const [result, setResult] = useState<Session | null>(null)
-  const [rcRequested, setRcRequested] = useState(false)
-  const [rcPollGiveUp, setRcPollGiveUp] = useState(false)
-  const rcPollCount = useRef(0)
   const [error, setError] = useState('')
   const [spawning, setSpawning] = useState(false)
-  const [spawnSpinIdx, setSpawnSpinIdx] = useState(0)
-  const [spinIdx, setSpinIdx] = useState(0)
-
-  const [ls] = useState(() => loadState().last_spawn)
-  const [workingDir, setWorkingDir] = useState(ls.working_dir || process.cwd())
-  const [provider, setProvider] = useState<Provider>(ls.provider)
-  const [auth, setAuth] = useState<Auth>(ls.auth)
-  const [task, setTask] = useState(ls.prompt)
-  const [effort, setEffort] = useState<Effort | null>(ls.effort)
-  const [permissions, setPermissions] = useState<Permissions>(ls.permissions)
-  const [model, setModel] = useState(ls.model ?? '')
-  const [tag, setTag] = useState(ls.tag ?? '')
-  const [name, setName] = useState(ls.name ?? '')
-  const [nameError, setNameError] = useState('')
-  const [remoteControl, setRemoteControl] = useState(false)
   const [cursor, setCursor] = useState(0)
 
-  useEffect(() => {
-    if (!spawning) return
-    const id = setInterval(() => setSpawnSpinIdx(i => (i + 1) % SPINNER.length), 80)
-    return () => clearInterval(id)
-  }, [spawning])
-
-  useEffect(() => {
-    if (!result || result.rc_url || rcPollGiveUp) return
-    const id = setInterval(() => setSpinIdx(i => (i + 1) % SPINNER.length), 100)
-    return () => clearInterval(id)
-  }, [result?.id, result?.rc_url, rcPollGiveUp])
-
-  useEffect(() => {
-    if (!result || result.rc_url || !rcRequested || rcPollGiveUp) return
-    rcPollCount.current = 0
-    // Poll for up to 60s (120 × 500ms); give up and surface an error after that.
-    const id = setInterval(() => {
-      rcPollCount.current++
-      if (rcPollCount.current > 120) {
-        setRcPollGiveUp(true)
-        clearInterval(id)
-        return
-      }
-      try {
-        const fresh = read(result.id)
-        if (fresh.rc_url) setResult(fresh)
-      } catch { /* registry miss */ }
-    }, 500)
-    return () => clearInterval(id)
-  }, [result?.id, result?.rc_url, rcRequested, rcPollGiveUp])
+  const lastSpawn = loadLastSpawn()
+  const [workingDir, setWorkingDir] = useState(lastSpawn.working_dir || process.cwd())
+  const [provider, setProvider] = useState<Provider>(lastSpawn.provider)
+  const [task, setTask] = useState(lastSpawn.task)
+  const [permissions, setPermissions] = useState<Permissions>(lastSpawn.permissions)
+  const [authMode, setAuthMode] = useState<AuthMode>(lastSpawn.auth_mode)
+  const [effort, setEffort] = useState<Effort>(lastSpawn.effort)
+  const [model, setModel] = useState(lastSpawn.model)
+  const [nickname, setNickname] = useState(lastSpawn.nickname)
+  const [rcEnabled, setRcEnabled] = useState(lastSpawn.rc_enabled)
 
   const isTextField = TEXT_FIELDS.has(focusIdx)
   const nav = useScreenNav(push, pop, isTextField)
   const { cmdMode } = nav
 
-  function getTextFieldValue(idx: number): string {
+  function getVal(idx: number): string {
     if (idx === 0) return workingDir
-    if (idx === 3) return task
+    if (idx === 2) return task
     if (idx === 6) return model
-    if (idx === 7) return tag
-    if (idx === 8) return name
+    if (idx === 7) return nickname
     return ''
+  }
+
+  function setVal(idx: number, updater: (_prev: string) => string) {
+    if (idx === 0) setWorkingDir(updater)
+    else if (idx === 2) setTask(updater)
+    else if (idx === 6) setModel(updater)
+    else if (idx === 7) setNickname(updater)
   }
 
   function moveFocus(newIdx: number) {
     setFocusIdx(newIdx)
-    if (TEXT_FIELDS.has(newIdx)) setCursor(getTextFieldValue(newIdx).length)
+    if (TEXT_FIELDS.has(newIdx)) setCursor(getVal(newIdx).length)
   }
 
   function renderCursor(value: string, cur: number): React.ReactNode {
@@ -140,34 +106,23 @@ export function Spawn() {
     )
   }
 
-  // Result view keys
-  useInput((input, key) => {
+  useInput((input, _key) => {
     if (!result || cmdMode) return
     if (input === 'a') {
-      if (process.env.TMUX) {
-        try {
-          execFileSync('tmux', ['switch-client', '-t', `${result.tmux_session}:${result.tmux_window}`], { stdio: 'ignore' })
-        } catch {
-          setError('tmux switch failed')
-          setTimeout(() => setError(''), 3000)
-        }
-      } else {
-        setError(`run: tmux attach -t ${result.tmux_session}:${result.tmux_window}`)
+      try {
+        const jump = jumpToSession(result)
+        if (!jump.inside_tmux) setError(jump.attach_command)
+      } catch {
+        setError('tmux jump failed')
         setTimeout(() => setError(''), 5000)
       }
       return
     }
-    if (input === 'c' && result.rc_url) {
-      process.stdout.write('\x1b]52;c;' + Buffer.from(result.rc_url).toString('base64') + '\x07')
-      return
-    }
-    if (input === 'l') { push('Sessions'); return }
+    if (input === 'h') push('TreeNavigator')
   }, { isActive: !!result && !cmdMode })
 
-  // Main form handler — text fields accept input on focus, no enter-to-edit step
   useInput((input, key) => {
     if (result) return
-
     if (key.tab) { moveFocus(Math.min(TOTAL_FIELDS - 1, focusIdx + 1)); return }
 
     if (isTextField) {
@@ -175,93 +130,74 @@ export function Spawn() {
       if (key.upArrow) { moveFocus(Math.max(0, focusIdx - 1)); return }
       if (key.downArrow || key.return) { moveFocus(Math.min(TOTAL_FIELDS - 1, focusIdx + 1)); return }
       if (key.leftArrow) { setCursor(c => Math.max(0, c - 1)); return }
-      if (key.rightArrow) { setCursor(c => Math.min(getTextFieldValue(focusIdx).length, c + 1)); return }
+      if (key.rightArrow) { setCursor(c => Math.min(getVal(focusIdx).length, c + 1)); return }
       if (key.ctrl && input === 'a') { setCursor(0); return }
-      if (key.ctrl && input === 'e') { setCursor(getTextFieldValue(focusIdx).length); return }
+      if (key.ctrl && input === 'e') { setCursor(getVal(focusIdx).length); return }
       if (key.backspace) {
         if (cursor === 0) return
-        if (focusIdx === 8) { const next = name.slice(0, cursor - 1) + name.slice(cursor); setName(next); setNameError(validateName(next) || '') }
-        else if (focusIdx === 0) setWorkingDir(v => v.slice(0, cursor - 1) + v.slice(cursor))
-        else if (focusIdx === 3) setTask(v => v.slice(0, cursor - 1) + v.slice(cursor))
-        else if (focusIdx === 6) setModel(v => v.slice(0, cursor - 1) + v.slice(cursor))
-        else if (focusIdx === 7) setTag(v => v.slice(0, cursor - 1) + v.slice(cursor))
+        setVal(focusIdx, v => v.slice(0, cursor - 1) + v.slice(cursor))
         setCursor(c => c - 1)
         return
       }
       if (key.delete) {
-        const fv = getTextFieldValue(focusIdx)
-        if (cursor >= fv.length) return
-        if (focusIdx === 8) { const next = name.slice(0, cursor) + name.slice(cursor + 1); setName(next); setNameError(validateName(next) || '') }
-        else if (focusIdx === 0) setWorkingDir(v => v.slice(0, cursor) + v.slice(cursor + 1))
-        else if (focusIdx === 3) setTask(v => v.slice(0, cursor) + v.slice(cursor + 1))
-        else if (focusIdx === 6) setModel(v => v.slice(0, cursor) + v.slice(cursor + 1))
-        else if (focusIdx === 7) setTag(v => v.slice(0, cursor) + v.slice(cursor + 1))
+        const v = getVal(focusIdx)
+        if (cursor >= v.length) return
+        setVal(focusIdx, prev => prev.slice(0, cursor) + prev.slice(cursor + 1))
         return
       }
       if (!key.ctrl && !key.meta && input) {
-        if (focusIdx === 8) {
-          const next = name.slice(0, cursor) + input + name.slice(cursor)
-          const err = validateName(next)
-          if (err) { setNameError(err); return }
-          setName(next); setNameError('')
-        } else if (focusIdx === 0) setWorkingDir(v => v.slice(0, cursor) + input + v.slice(cursor))
-        else if (focusIdx === 3) setTask(v => v.slice(0, cursor) + input + v.slice(cursor))
-        else if (focusIdx === 6) setModel(v => v.slice(0, cursor) + input + v.slice(cursor))
-        else if (focusIdx === 7) setTag(v => v.slice(0, cursor) + input + v.slice(cursor))
+        setVal(focusIdx, v => v.slice(0, cursor) + input + v.slice(cursor))
         setCursor(c => c + 1)
-        return
       }
       return
     }
 
-    // Select / toggle / submit
     if (key.upArrow) { moveFocus(Math.max(0, focusIdx - 1)); return }
     if (key.downArrow) { moveFocus(Math.min(TOTAL_FIELDS - 1, focusIdx + 1)); return }
     if (key.leftArrow) {
       if (focusIdx === 1) setProvider(p => cycle(PROVIDERS, p, -1))
-      else if (focusIdx === 2) setAuth(a => cycle(AUTHS, a, -1))
-      else if (focusIdx === 4) setEffort(e => cycle(EFFORTS, e, -1))
-      else if (focusIdx === 5) setPermissions(p => cycle(PERMS, p, -1))
-      else if (focusIdx === 9 && provider === 'cc') setRemoteControl(rc => !rc)
+      else if (focusIdx === 3) setPermissions(p => cycle(PERMS, p, -1))
+      else if (focusIdx === 4 && AUTH_PROVIDERS.has(provider)) setAuthMode(p => cycle(AUTH_MODES, p, -1))
+      else if (focusIdx === 5 && EFFORT_PROVIDERS.has(provider)) setEffort(p => cycle(EFFORTS, p, -1))
+      else if (focusIdx === 8 && RC_PROVIDERS.has(provider)) setRcEnabled(v => !v)
       return
     }
     if (key.rightArrow) {
       if (focusIdx === 1) setProvider(p => cycle(PROVIDERS, p, 1))
-      else if (focusIdx === 2) setAuth(a => cycle(AUTHS, a, 1))
-      else if (focusIdx === 4) setEffort(e => cycle(EFFORTS, e, 1))
-      else if (focusIdx === 5) setPermissions(p => cycle(PERMS, p, 1))
-      else if (focusIdx === 9 && provider === 'cc') setRemoteControl(rc => !rc)
+      else if (focusIdx === 3) setPermissions(p => cycle(PERMS, p, 1))
+      else if (focusIdx === 4 && AUTH_PROVIDERS.has(provider)) setAuthMode(p => cycle(AUTH_MODES, p, 1))
+      else if (focusIdx === 5 && EFFORT_PROVIDERS.has(provider)) setEffort(p => cycle(EFFORTS, p, 1))
+      else if (focusIdx === 8 && RC_PROVIDERS.has(provider)) setRcEnabled(v => !v)
       return
     }
     if (key.return && focusIdx === TOTAL_FIELDS - 1) {
       setError('')
       setSpawning(true)
-      setSpawnSpinIdx(0)
-      const rcEnabled = remoteControl && provider === 'cc'
       try {
         const session = spawn({
-          provider, auth,
-          model: model || undefined,
-          permissions, effort,
-          tag: tag || undefined,
-          start_prompt: task || undefined,
-          working_dir: workingDir || undefined,
-          name: name || undefined,
-          remote_control: rcEnabled || undefined,
+          provider,
+          model,
+          auth_mode: AUTH_PROVIDERS.has(provider) ? authMode : 'default',
+          effort: EFFORT_PROVIDERS.has(provider) ? effort : 'default',
+          task: task || '(interactive)',
+          working_dir: workingDir || process.cwd(),
+          nickname: nickname || undefined,
+          permissions,
+          rc_enabled: rcEnabled && RC_PROVIDERS.has(provider),
         })
-        setRcRequested(rcEnabled)
+        saveLastSpawn({ provider, model, auth_mode: authMode, effort, task, working_dir: workingDir, nickname, permissions, rc_enabled: rcEnabled })
         setResult(session)
         setSpawning(false)
       } catch (err) {
         setError(err instanceof Error ? err.message : 'spawn failed')
         setSpawning(false)
       }
-      return
     }
   }, { isActive: !cmdMode })
 
-  function rowColor(idx: number) { return focusIdx === idx ? '#5a96e0' : 'gray' }
-  function marker(idx: number) { return focusIdx === idx ? '>' : ' ' }
+  const rowColor = (idx: number) => focusIdx === idx ? '#5a96e0' : 'gray'
+  const marker = (idx: number) => focusIdx === idx ? '>' : ' '
+  const help = FIELD_HELP[focusIdx]
 
   function textRow(idx: number, label: string, value: string, placeholder: string) {
     const focused = focusIdx === idx
@@ -276,21 +212,17 @@ export function Spawn() {
     )
   }
 
-  function selectRow(idx: number, label: string, value: string | null, colorFn?: (_v: string | null) => string, labelFn?: (_v: string | null) => string) {
+  function selectRow(idx: number, label: string, displayVal: string, color = '#7eb8f5') {
     const focused = focusIdx === idx
-    const displayVal = labelFn ? labelFn(value) : (value ?? '—')
-    const displayColor = colorFn ? colorFn(value) : '#7eb8f5'
     return (
       <Box>
         <Text color={rowColor(idx)} bold={focused}>{marker(idx)} {label.padEnd(14)}</Text>
         {focused && <Text color="gray" dimColor>{'← '}</Text>}
-        <Text color={displayColor} bold={focused}>{displayVal}</Text>
+        <Text color={color} bold={focused}>{displayVal}</Text>
         {focused && <Text color="gray" dimColor>{' →'}</Text>}
       </Box>
     )
   }
-
-  const help = FIELD_HELP[focusIdx]
 
   if (result) {
     return (
@@ -298,7 +230,7 @@ export function Spawn() {
         screen="Spawn"
         panes={panes}
         nav={nav}
-        hint="a attach  c copy URL  l sessions  esc back"
+        hint="a attach  h home  esc back"
         header={
           <Box>
             <Text color="#5a96e0" bold>REEVES AGENTS</Text>
@@ -307,44 +239,18 @@ export function Spawn() {
           </Box>
         }
       >
-        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingLeft={1} paddingRight={1} marginBottom={1}>
+        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} marginBottom={1}>
           <Text color="#4a6fa5">── SESSION ──────────────────────</Text>
           <Box><Text color="gray" dimColor>{'id          '}</Text><Text color="#7eb8f5">{result.id}</Text></Box>
-          <Box><Text color="gray" dimColor>{'provider    '}</Text><Text color={providerColor(result.provider)}>●{result.provider}</Text></Box>
-          <Box><Text color="gray" dimColor>{'name        '}</Text><Text>{result.name}</Text></Box>
-          {result.working_dir && (
-            <Box><Text color="gray" dimColor>{'working dir '}</Text><Text color="gray">{result.working_dir.replace(homedir(), '~')}</Text></Box>
-          )}
-          {result.tag && (
-            <Box><Text color="gray" dimColor>{'tag         '}</Text><Text>{result.tag}</Text></Box>
-          )}
+          <Box><Text color="gray" dimColor>{'nickname    '}</Text><Text>{result.nickname}</Text></Box>
+          <Box><Text color="gray" dimColor>{'provider    '}</Text><Text color={providerColor(result.provider)}>● {result.provider}</Text></Box>
+          <Box><Text color="gray" dimColor>{'working dir '}</Text><Text color="gray">{result.working_dir.replace(homedir(), '~')}</Text></Box>
         </Box>
-
-        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingLeft={1} paddingRight={1} marginBottom={1}>
+        <Box flexDirection="column" borderStyle="round" borderColor="gray" paddingX={1} marginBottom={1}>
           <Text color="#4a6fa5">── ATTACH ───────────────────────</Text>
-          <Text color="gray" dimColor>tmux attach -t {result.tmux_session}:{result.tmux_window}</Text>
-          <Text color="#6e7681" dimColor>or if in tmux: tmux switch-client -t {result.tmux_session}:{result.tmux_window}</Text>
+          <Text color="gray" dimColor>tmux attach -t {result.tmux_session}</Text>
+          {process.env.TMUX && <Text color="gray" dimColor>or press a</Text>}
         </Box>
-
-        {rcRequested && (
-          <Box flexDirection="column" borderStyle="round" borderColor={result.rc_url ? 'green' : rcPollGiveUp ? 'yellow' : 'gray'} paddingLeft={1} paddingRight={1} marginBottom={1}>
-            <Text color="#4a6fa5">── REMOTE CONTROL ───────────────</Text>
-            {result.rc_url ? (
-              <Box>
-                <Text color="green">{result.rc_url}</Text>
-                <Text color="gray" dimColor>  c to copy</Text>
-              </Box>
-            ) : rcPollGiveUp ? (
-              <Text color="yellow">URL not received after 60s — type /remote-control in the session</Text>
-            ) : (
-              <Box>
-                <Text color="gray" dimColor>{SPINNER[spinIdx]} </Text>
-                <Text color="gray" dimColor>waiting for URL...</Text>
-              </Box>
-            )}
-          </Box>
-        )}
-
         {error && <Text color="yellow">{error}</Text>}
       </ScreenLayout>
     )
@@ -355,7 +261,7 @@ export function Spawn() {
       screen="Spawn"
       panes={panes}
       nav={nav}
-      hint="tab/↑↓ navigate  ← → select/cursor  ctrl-a/e home/end"
+      hint="tab/↑↓ navigate  ← → select  ctrl-a/e home/end"
       header={
         <Box>
           <Text color="#5a96e0" bold>REEVES AGENTS</Text>
@@ -364,44 +270,35 @@ export function Spawn() {
       }
       rightPanel={
         panes >= 2 && help ? (
-          <Box flexDirection="column" width={40} marginLeft={2} borderStyle="round" borderColor="#1e2d3e" paddingLeft={1} paddingRight={1}>
+          <Box flexDirection="column" width={40} marginLeft={2} borderStyle="round" borderColor="#1e2d3e" paddingX={1}>
             <Text color="#4a6fa5">── {help.label.toUpperCase()} {'─'.repeat(Math.max(0, 34 - help.label.length))}</Text>
             <Text color="gray" wrap="wrap">{help.text}</Text>
-            {ls.prompt && focusIdx === 3 && (
-              <Box marginTop={1}>
-                <Text color="#6e7681" dimColor>last: {ls.prompt.slice(0, 60)}{ls.prompt.length > 60 ? '…' : ''}</Text>
-              </Box>
-            )}
           </Box>
         ) : undefined
       }
     >
       {spawning ? (
-        <Box marginBottom={1}>
-          <Text color="#5a96e0">{SPINNER[spawnSpinIdx]} spawning...</Text>
-        </Box>
+        <Box marginBottom={1}><Text color="#5a96e0">spawning...</Text></Box>
       ) : (
         <Box flexDirection="column" marginBottom={1}>
           {textRow(0, 'working dir', workingDir, process.cwd())}
-          {selectRow(1, 'provider', provider, p => p ? providerColor(p as Provider) : 'gray')}
-          {selectRow(2, 'auth', auth)}
-          {textRow(3, 'task', task, '(optional) leave blank for interactive session')}
-          {selectRow(4, 'effort', effort, undefined, v => v ?? '—')}
-          {selectRow(5, 'permissions', permissions)}
+          {selectRow(1, 'provider', provider, providerColor(provider))}
+          {textRow(2, 'task', task, '(optional) leave blank for interactive session')}
+          {selectRow(3, 'permissions', permissions)}
+          {selectRow(4, 'auth', AUTH_PROVIDERS.has(provider) ? authMode : 'default')}
+          {selectRow(5, 'effort', EFFORT_PROVIDERS.has(provider) ? effort : 'default')}
           {textRow(6, 'model', model, '(optional) leave blank for default')}
-          {textRow(7, 'tag', tag, '(optional) e.g. feature-branch')}
-          {textRow(8, 'name', name, '(optional) override session name')}
-          {nameError && <Box paddingLeft={2}><Text color="red" dimColor>{nameError}</Text></Box>}
+          {textRow(7, 'nickname', nickname, '(optional) label in tree view')}
           <Box>
-            <Text color={rowColor(9)} bold={focusIdx === 9}>{marker(9)} {'remote ctrl'.padEnd(14)}</Text>
-            {provider === 'cc' ? (
+            <Text color={rowColor(8)} bold={focusIdx === 8}>{marker(8)} {'remote ctrl'.padEnd(14)}</Text>
+            {RC_PROVIDERS.has(provider) ? (
               <>
-                {focusIdx === 9 && <Text color="gray" dimColor>{'← '}</Text>}
-                <Text color="#7eb8f5" bold={focusIdx === 9}>{remoteControl ? 'on' : 'off'}</Text>
-                {focusIdx === 9 && <Text color="gray" dimColor>{' →'}</Text>}
+                {focusIdx === 8 && <Text color="gray" dimColor>{'← '}</Text>}
+                <Text color="#7eb8f5" bold={focusIdx === 8}>{rcEnabled ? 'on' : 'off'}</Text>
+                {focusIdx === 8 && <Text color="gray" dimColor>{' →'}</Text>}
               </>
             ) : (
-              <Text color="gray" dimColor>off  (cc only)</Text>
+              <Text color="gray" dimColor>off  (cc/codex only)</Text>
             )}
           </Box>
         </Box>

@@ -16,16 +16,13 @@ export interface DeduplicatedRoute {
 
 // Ordered route table: one entry per destination, longer form as primary.
 export const DEDUPED_ROUTES: DeduplicatedRoute[] = [
-  { primary: '/home',        alias: '/h',   screen: 'Home',        description: 'go to home screen' },
-  { primary: '/spawn',       alias: '/s',   screen: 'Spawn',       description: 'spawn a single agent' },
-  { primary: '/orchestrate', alias: '/o',   screen: 'Orchestrate', description: 'fan out multiple agents' },
-  { primary: '/sessions',    alias: '/l',   screen: 'Sessions',    description: 'view all running sessions' },
-  { primary: '/top',         alias: '/t',   screen: 'Top',         description: 'live session monitor' },
-  { primary: '/history',     alias: '/hi',  screen: 'History',     description: 'view session history' },
-  { primary: '/settings',    alias: '/cfg', screen: 'Settings',    description: 'configure providers' },
-  { primary: '/doctor',      alias: '/d',   screen: 'Doctor',      description: 'run health checks' },
-  { primary: '/help',        alias: '',     screen: 'Help',        description: 'keyboard reference' },
-  { primary: '/quit',        alias: '/q',   screen: '__quit__',    description: 'exit' },
+  { primary: '/tree',        alias: '/h',   screen: 'TreeNavigator', description: 'session tree (home)' },
+  { primary: '/spawn',       alias: '/s',   screen: 'Spawn',         description: 'spawn a new agent' },
+  { primary: '/orchestrate', alias: '/o',   screen: 'Orchestrate',   description: 'saved agent trees' },
+  { primary: '/settings',    alias: '/cfg', screen: 'Settings',      description: 'CLI registration + config' },
+  { primary: '/doctor',      alias: '/d',   screen: 'Doctor',        description: 'run health checks' },
+  { primary: '/help',        alias: '',     screen: 'Help',          description: 'keyboard reference' },
+  { primary: '/quit',        alias: '/q',   screen: '__quit__',      description: 'exit' },
 ]
 
 // Flat lookup map for direct Enter without picker selection
@@ -34,8 +31,7 @@ for (const r of DEDUPED_ROUTES) {
   SLASH_ROUTES[r.primary] = r.screen
   if (r.alias) SLASH_ROUTES[r.alias] = r.screen
 }
-// Legacy aliases kept for backward compat
-SLASH_ROUTES['/welcome'] = 'Welcome'
+SLASH_ROUTES['/home'] = 'TreeNavigator'
 
 export interface ScreenNavState {
   cmdMode: boolean

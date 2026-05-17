@@ -1,110 +1,118 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
+import { randomUUID } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
-import { join } from 'node:path'
 import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import type { SavedTree } from '../src/state/types.js'
 
-let tmpDir: string
+let testName: string
+let tmpHome: string
+let oldHome: string | undefined
 
 beforeEach(() => {
-  tmpDir = mkdtempSync(join(tmpdir(), 'reeves-store-test-'))
-  process.env.REEVES_STATE = join(tmpDir, 'state.json')
+  oldHome = process.env.HOME
+  tmpHome = mkdtempSync(join(tmpdir(), 'reeves-store-test-'))
+  process.env.HOME = tmpHome
+  testName = `_test-${randomUUID().slice(0, 8)}`
 })
 
-afterEach(() => {
-  delete process.env.REEVES_STATE
-  rmSync(tmpDir, { recursive: true, force: true })
+afterEach(async () => {
+  const { deleteSavedTree } = await import('../src/state/store.js')
+  deleteSavedTree(testName)
+  if (oldHome === undefined) delete process.env.HOME
+  else process.env.HOME = oldHome
+  rmSync(tmpHome, { recursive: true, force: true })
 })
+
+function makeTree(name: string, overrides: Partial<SavedTree> = {}): SavedTree {
+  const now = new Date().toISOString()
+  return {
+    name,
+    description: 'test tree',
+    root: {
+      nickname_template: 'root',
+      provider: 'cc',
+      model: '',
+      auth_mode: 'default',
+      effort: 'default',
+      task_template: 'do the work',
+      working_dir: '/tmp',
+      permissions: 'skip',
+      rc_enabled: false,
+    },
+    workers: [],
+    working_dir_pattern: '/tmp',
+    created_at: now,
+    updated_at: now,
+    ...overrides,
+  }
+}
 
 describe('store', () => {
-  it('defaultState returns valid AppState structure', async () => {
-    const { defaultState } = await import('../src/state/store.js')
-    const s = defaultState()
-    expect(s.version).toBe(1)
-    expect(s.last_spawn).toBeDefined()
-    expect(s.last_orchestrate).toBeDefined()
-    expect(Array.isArray(s.presets)).toBe(true)
-    expect(Array.isArray(s.recent_sessions)).toBe(true)
-    expect(s.history.spawned_total).toBe(0)
+  it('listSavedTrees returns an array', async () => {
+    const { listSavedTrees } = await import('../src/state/store.js')
+    expect(Array.isArray(listSavedTrees())).toBe(true)
   })
 
-  it('saveState and loadState roundtrip', async () => {
-    const { defaultState, saveState, loadState } = await import('../src/state/store.js')
-    const s = defaultState()
-    s.last_spawn.prompt = 'test prompt'
-    saveState(s)
-    const loaded = loadState()
-    expect(loaded.last_spawn.prompt).toBe('test prompt')
+  it('saveSavedTree + loadSavedTree roundtrip', async () => {
+    const { saveSavedTree, loadSavedTree } = await import('../src/state/store.js')
+    saveSavedTree(makeTree(testName))
+    const loaded = loadSavedTree(testName)
+    expect(loaded?.name).toBe(testName)
+    expect(loaded?.description).toBe('test tree')
+    expect(loaded?.root.provider).toBe('cc')
+    expect(loaded?.root.task_template).toBe('do the work')
   })
 
-  it('loadState returns defaults when file missing', async () => {
-    const { loadState, defaultState } = await import('../src/state/store.js')
-    const loaded = loadState()
-    const defaults = defaultState()
-    expect(loaded.version).toBe(defaults.version)
+  it('saveSavedTree makes tree appear in listSavedTrees', async () => {
+    const { saveSavedTree, listSavedTrees } = await import('../src/state/store.js')
+    saveSavedTree(makeTree(testName))
+    expect(listSavedTrees().map(t => t.name)).toContain(testName)
   })
 
-  it('setLastSpawn updates last_spawn and increments counter', async () => {
-    const { setLastSpawn, loadState } = await import('../src/state/store.js')
-    setLastSpawn({ prompt: 'spawn task', tag: 'v3' })
-    const s = loadState()
-    expect(s.last_spawn.prompt).toBe('spawn task')
-    expect(s.last_spawn.tag).toBe('v3')
-    expect(s.history.spawned_total).toBe(1)
+  it('saveSavedTree with workers preserves worker array', async () => {
+    const { saveSavedTree, loadSavedTree } = await import('../src/state/store.js')
+    const tree = makeTree(testName, {
+      workers: [{
+        nickname_template: 'worker-1',
+        provider: 'codex',
+        model: 'gpt-4o',
+        auth_mode: 'default',
+        effort: 'default',
+        task_template: 'help with {{root_task}}',
+        working_dir: '/tmp',
+        permissions: 'ask',
+        rc_enabled: false,
+      }]
+    })
+    saveSavedTree(tree)
+    const loaded = loadSavedTree(testName)
+    expect(loaded?.workers).toHaveLength(1)
+    expect(loaded?.workers[0]?.provider).toBe('codex')
+    expect(loaded?.workers[0]?.task_template).toBe('help with {{root_task}}')
   })
 
-  it('addRecentSession caps at 10', async () => {
-    const { addRecentSession, loadState } = await import('../src/state/store.js')
-    for (let i = 0; i < 15; i++) {
-      addRecentSession(`session-${i}`)
-    }
-    const s = loadState()
-    expect(s.recent_sessions.length).toBe(10)
-    expect(s.recent_sessions[0]).toBe('session-14')
+  it('deleteSavedTree removes tree from listSavedTrees', async () => {
+    const { saveSavedTree, deleteSavedTree, listSavedTrees } = await import('../src/state/store.js')
+    saveSavedTree(makeTree(testName))
+    deleteSavedTree(testName)
+    expect(listSavedTrees().map(t => t.name)).not.toContain(testName)
   })
 
-  it('addRecentSession deduplicates', async () => {
-    const { addRecentSession, loadState } = await import('../src/state/store.js')
-    addRecentSession('abc')
-    addRecentSession('def')
-    addRecentSession('abc')
-    const s = loadState()
-    expect(s.recent_sessions.length).toBe(2)
-    expect(s.recent_sessions[0]).toBe('abc')
+  it('loadSavedTree returns null for a missing tree', async () => {
+    const { loadSavedTree } = await import('../src/state/store.js')
+    expect(loadSavedTree('definitely-does-not-exist-xyzzy-999')).toBeNull()
   })
 
-  it('addPreset and removePreset', async () => {
-    const { addPreset, removePreset, loadState } = await import('../src/state/store.js')
-    addPreset('mypreset', 'build a feature', [{ name: 'agent-1', prompt: 'do the thing' }], { provider: 'cc', auth: 'subscription', model: null, permissions: 'skip', effort: 'high' })
-    expect(loadState().presets.length).toBe(1)
-    removePreset('mypreset')
-    expect(loadState().presets.length).toBe(0)
+  it('deleteSavedTree on a missing tree does not throw', async () => {
+    const { deleteSavedTree } = await import('../src/state/store.js')
+    expect(() => deleteSavedTree('definitely-does-not-exist-xyzzy-999')).not.toThrow()
   })
 
-  it('addPreset upserts by name', async () => {
-    const { addPreset, loadState } = await import('../src/state/store.js')
-    addPreset('p1', 'goal1', [], { provider: 'cc', auth: 'subscription', model: null, permissions: 'skip', effort: 'high' })
-    addPreset('p1', 'goal2', [], { provider: 'gemini', auth: 'api-key', model: null, permissions: 'ask', effort: 'low' })
-    expect(loadState().presets.length).toBe(1)
-    expect(loadState().presets[0]?.goal).toBe('goal2')
-  })
-
-  it('defaultState includes working_dir in last_spawn', async () => {
-    const { defaultState } = await import('../src/state/store.js')
-    const s = defaultState()
-    expect(s.last_spawn.working_dir).toBe('')
-  })
-
-  it('setLastSpawn persists working_dir', async () => {
-    const { setLastSpawn, loadState } = await import('../src/state/store.js')
-    setLastSpawn({ working_dir: '/home/user/project' })
-    expect(loadState().last_spawn.working_dir).toBe('/home/user/project')
-  })
-
-  it('setLastSpawn working_dir survives save/load roundtrip', async () => {
-    const { setLastSpawn, loadState } = await import('../src/state/store.js')
-    setLastSpawn({ prompt: 'build it', working_dir: '/srv/app' })
-    const s = loadState()
-    expect(s.last_spawn.prompt).toBe('build it')
-    expect(s.last_spawn.working_dir).toBe('/srv/app')
+  it('overwriting a tree with saveSavedTree updates it', async () => {
+    const { saveSavedTree, loadSavedTree } = await import('../src/state/store.js')
+    saveSavedTree(makeTree(testName, { description: 'original' }))
+    saveSavedTree(makeTree(testName, { description: 'updated' }))
+    expect(loadSavedTree(testName)?.description).toBe('updated')
   })
 })

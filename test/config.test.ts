@@ -23,23 +23,24 @@ describe('config', () => {
     expect(configExists()).toBe(false)
   })
 
-  it('defaultConfig returns valid structure', async () => {
+  it('defaultConfig returns valid v4 structure', async () => {
     const { defaultConfig } = await import('../src/state/config.js')
     const cfg = defaultConfig()
-    expect(cfg.version).toBe(1)
-    expect(cfg.providers.cc).toBeDefined()
-    expect(cfg.providers.codex).toBeDefined()
-    expect(cfg.providers.gemini).toBeDefined()
-    expect(cfg.ui).toBeDefined()
+    expect(cfg.version).toBe(2)
+    expect(typeof cfg.global).toBe('object')
+    expect(typeof cfg.global.peek_interval_ms).toBe('number')
+    expect(typeof cfg.global.max_agents).toBe('number')
   })
 
   it('saveConfig then loadConfig roundtrip', async () => {
     const { saveConfig, loadConfig, defaultConfig } = await import('../src/state/config.js')
     const original = defaultConfig()
-    original.providers.cc.key_env = 'MY_KEY'
+    original.global.peek_lines = 20
+    original.global.max_agents = 5
     saveConfig(original)
     const loaded = loadConfig()
-    expect(loaded.providers.cc.key_env).toBe('MY_KEY')
+    expect(loaded.global.peek_lines).toBe(20)
+    expect(loaded.global.max_agents).toBe(5)
   })
 
   it('loadConfig returns defaults when file missing', async () => {
@@ -47,26 +48,12 @@ describe('config', () => {
     const loaded = loadConfig()
     const defaults = defaultConfig()
     expect(loaded.version).toBe(defaults.version)
-    expect(loaded.providers.cc.auth).toBe(defaults.providers.cc.auth)
+    expect(loaded.global.peek_interval_ms).toBe(defaults.global.peek_interval_ms)
   })
 
   it('configExists returns true after save', async () => {
     const { saveConfig, defaultConfig, configExists } = await import('../src/state/config.js')
     saveConfig(defaultConfig())
     expect(configExists()).toBe(true)
-  })
-
-  it('getProvider returns correct provider', async () => {
-    const { saveConfig, defaultConfig, getProvider } = await import('../src/state/config.js')
-    const cfg = defaultConfig()
-    cfg.providers.codex.key_env = 'OPENAI_KEY'
-    saveConfig(cfg)
-    const p = getProvider('codex')
-    expect(p.key_env).toBe('OPENAI_KEY')
-  })
-
-  it('getProvider throws on unknown provider', async () => {
-    const { getProvider } = await import('../src/state/config.js')
-    expect(() => getProvider('unknown')).toThrow()
   })
 })

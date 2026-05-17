@@ -1,162 +1,149 @@
-// Shared types across state, launcher, and UI layers.
-// All JSON schemas are byte-compatible with v2 Python format.
+// Core type definitions. Session schema is the source of truth for registry and MCP surface.
 
-export type Provider = 'cc' | 'codex' | 'gemini' | 'opencode' | 'aider' | 'hermes'
-export type Auth = 'subscription' | 'api-key' | 'custom'
+export type Provider = 'cc' | 'codex' | 'gemini' | 'hermes'
+
 export type Permissions = 'skip' | 'ask'
-export type Effort = 'low' | 'medium' | 'high'
+
+export type TaskStatus = 'queued' | 'working' | 'done' | 'failed' | 'blocked'
+
+export type AuthMode = 'default' | 'api-key'
+
+export type Effort = 'default' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+// Computed from last_seen + ended_at — never stored in registry.
+export type SessionStatus = 'idle' | 'working' | 'ended'
+
+export type Panes = 1 | 2 | 3
+
 export type ScreenName =
   | 'Welcome'
-  | 'Home'
+  | 'TreeNavigator'
   | 'Spawn'
   | 'Orchestrate'
-  | 'Sessions'
-  | 'Top'
-  | 'History'
   | 'Settings'
   | 'Doctor'
   | 'Help'
-export type Panes = 1 | 2 | 3
 
-// ~/.reeves/config.json (version 1)
-export interface ProviderConfig {
-  auth: Auth
-  base_url: string | null
-  key_env: string | null
-  default_model: string | null
-  default_permissions: Permissions
-  default_effort: Effort | null
-}
-
-export interface Config {
-  version: number
-  providers: Record<Provider, ProviderConfig>
-  ui: {
-    last_used_tag: string | null
-    last_used_goal: string | null
-  }
-  global: {
-    tmux_session_name: string
-    peek_interval_seconds: 3 | 5 | 10
-  }
-}
-
-// ~/.reeves/state.json (version 1)
-export interface SpawnFormState {
-  provider: Provider
-  auth: Auth
-  model: string | null
-  permissions: Permissions
-  effort: Effort | null
-  tag: string | null
-  name: string | null
-  prompt: string
-  working_dir: string
-}
-
-export interface SharedFormState {
-  provider: Provider
-  auth: Auth
-  model: string | null
-  permissions: Permissions
-  effort: Effort | null
-}
-
-export interface WorkerEntry {
-  name: string
-  prompt: string
-}
-
-export interface OrchestrateFormState {
-  goal: string
-  tag: string
-  shared: SharedFormState
-  workers: WorkerEntry[]
-}
-
-export interface Preset {
-  name: string
-  goal: string
-  workers: WorkerEntry[]
-  shared: SharedFormState
-}
-
-export interface AppState {
-  version: number
-  last_spawn: SpawnFormState
-  last_orchestrate: OrchestrateFormState
-  presets: Preset[]
-  recent_sessions: string[]
-  history: {
-    spawned_total: number
-    orchestrated_total: number
-  }
+export interface Message {
+  id: string
+  from_id: string       // sender's session id
+  text: string
+  sent_at: string       // ISO 8601
+  read: boolean
 }
 
 // ~/.reeves/sessions/<id>.json
 export interface Session {
-  id: string
-  name: string
-  parent_id: string | null
+  id: string            // crypto.randomUUID()
+  nickname: string      // user label, part of tmux session name
   provider: Provider
-  auth: Auth
-  base_url: string | null
-  model: string | null
-  key_ref: string | null
-  tag: string | null
-  permissions: Permissions
-  effort: Effort | null
-  start_prompt: string | null
-  goal: string | null
-  tmux_session: string
-  tmux_window: string
-  created_at: string
-  last_seen_at: string
-  working_dir: string | null
+  model: string
+  working_dir: string   // absolute path
+  task: string          // initial prompt injected at spawn
+  task_status: TaskStatus
+  task_note: string     // free-text from orchestrating CLI via update_task
+  parent_id: string | null
+  root_id: string       // own id for root; ancestor's root_id for children
+  depth_level: number   // 0 = root, increments per generation
+  last_seen: number     // ms epoch, updated on every check_messages() MCP call
+  started_at: string    // ISO 8601
   ended_at: string | null
-  rc_url: string | null
+  tmux_session: string  // "reeves_<nickname>_<id[:8]>"
+  rc_enabled: boolean
+  inbox: Message[]
 }
 
-// Spawn request to launcher
+// Drives Session creation — not persisted.
 export interface SpawnRequest {
   provider: Provider
-  auth: Auth
-  base_url?: string | null
-  model?: string | null
-  key_ref?: string | null
-  parent_id?: string | null
-  name?: string | null
+  model: string
+  auth_mode?: AuthMode
+  effort?: Effort
+  task: string
+  working_dir: string
+  nickname?: string
   permissions?: Permissions
-  effort?: Effort | null
-  tag?: string | null
-  start_prompt?: string | null
-  goal?: string | null
-  working_dir?: string
-  remote_control?: boolean
+  rc_enabled?: boolean
+  parent_id?: string
+  ready_delay_ms?: number
 }
 
-// Internal config passed to command/env builder
-export interface SpawnConfig {
+// Per-slot config inside a saved orchestration tree.
+export interface SavedTreeSlot {
+  nickname_template: string  // e.g. "researcher-1"
   provider: Provider
-  auth: Auth
-  base_url?: string | null
-  model?: string | null
-  key_ref?: string | null
+  model: string
+  auth_mode: AuthMode
+  effort: Effort
+  task_template: string      // may include {{root_task}} placeholder
+  working_dir: string
   permissions: Permissions
-  effort?: Effort | null
+  rc_enabled: boolean
 }
 
-// Doctor check result
+// ~/.reeves/saved-trees/<name>.json
+export interface SavedTree {
+  name: string
+  description: string
+  root: SavedTreeSlot
+  workers: SavedTreeSlot[]
+  working_dir_pattern?: string
+  created_at: string
+  updated_at: string
+}
+
+// Return shape for tree() MCP tool.
+export interface TreeNode {
+  session: Session
+  status: SessionStatus
+  children: TreeNode[]
+}
+
+// UX-convenience form state — persisted so the form remembers last values.
+export interface SpawnFormState {
+  provider: Provider
+  model: string
+  auth_mode: AuthMode
+  effort: Effort
+  task: string
+  working_dir: string
+  nickname: string
+  permissions: Permissions
+  rc_enabled: boolean
+}
+
+export interface OrchestrateFormState {
+  root: SavedTreeSlot
+  workers: SavedTreeSlot[]
+  working_dir: string
+}
+
+// Doctor check result.
 export interface CheckResult {
   name: string
   status: 'ok' | 'warn' | 'fail'
   detail: string
 }
 
-// Router context shape
+// Router context — stack navigation via push/pop/replace.
 export interface RouterContextValue {
   screen: ScreenName
   push: (_screen: ScreenName) => void
   pop: () => void
   replace: (_screen: ScreenName) => void
+}
+
+// Global preferences; no auth, no keys.
+export interface GlobalConfig {
+  peek_interval_ms: number          // ms between peek polls; default 3000
+  peek_lines: number                // capture-pane lines shown; default 10
+  max_depth: number                 // spawn recursion cap; default 5
+  max_agents: number                // tree size cap; default 10
+  ready_delay_ms: number            // ms to wait after session start before task injection; default 2000
+  default_permissions: Permissions  // default 'ask'
+}
+
+export interface Config {
+  version: number
+  global: GlobalConfig
 }

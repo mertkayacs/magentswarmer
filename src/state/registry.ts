@@ -1,128 +1,166 @@
-// Session registry: generate IDs, read/write session JSON, list all, manage lifecycle.
-// Reads from REEVES_REGISTRY env or ~/.reeves/sessions.
-// Atomic writes, collision retry, stale detection, default field merge.
+// Session registry: CRUD operations for per-session JSON files.
+// Storage: REEVES_REGISTRY env or ~/.reeves/sessions/<id>.json.
+// All writes use 0o600 mode — session data is owner-private.
+// Atomic write via temp file + rename. Mutations are serialized with a lock file.
 
-import { readFileSync, writeFileSync, readdirSync, unlinkSync, mkdirSync, renameSync } from 'node:fs'
+import {
+  readFileSync,
+  writeFileSync,
+  readdirSync,
+  unlinkSync,
+  mkdirSync,
+  renameSync,
+  chmodSync,
+  openSync,
+  closeSync,
+  statSync,
+} from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { randomInt } from 'node:crypto'
-import type { Session, Provider, Auth, Effort, Permissions } from './types.js'
+import type { Session, SessionStatus, Message } from './types.js'
+import { redactSecrets } from '../utils/display.js'
 
-const ALPHABET = 'abcdefghjkmnpqrstvwxyz23456789'
-const ID_LEN = 4
-const COLLISION_RETRIES = 5
+// Redacts API-key-shaped substrings from every user-text field before serialising.
+// Idempotent — already-redacted text passes through unchanged.
+function redactSession(s: Session): Session {
+  return {
+    ...s,
+    task: redactSecrets(s.task),
+    task_note: redactSecrets(s.task_note),
+    inbox: s.inbox.map(m => ({ ...m, text: redactSecrets(m.text) })),
+  }
+}
 
 export function registryDir(): string {
-  const base = process.env.REEVES_REGISTRY
-  if (base) return base
+  const env = process.env.REEVES_REGISTRY
+  if (env) return env
   return join(homedir(), '.reeves', 'sessions')
-}
-
-function randomId(): string {
-  let id = ''
-  for (let i = 0; i < ID_LEN; i++) {
-    id += ALPHABET[randomInt(0, ALPHABET.length)]
-  }
-  return id
-}
-
-export function newId(): string {
-  const dir = registryDir()
-  let retries = 0
-
-  while (retries < COLLISION_RETRIES) {
-    const id = randomId()
-    const path = join(dir, `${id}.json`)
-
-    try {
-      readFileSync(path, 'utf-8')
-      // File exists, retry
-    } catch {
-      // File does not exist, good
-      return id
-    }
-
-    retries++
-  }
-
-  throw new Error(`Failed to generate unique session ID after ${COLLISION_RETRIES} retries`)
 }
 
 export function nowIso(): string {
   return new Date().toISOString()
 }
 
-function mergeDefaults(raw: unknown): Session {
-  const defaults: Partial<Session> = {
-    tag: null,
-    permissions: 'ask',
-    effort: null,
-    start_prompt: null,
-    goal: null
-  }
-
-  if (typeof raw !== 'object' || raw === null) {
-    throw new Error('Session data must be an object')
-  }
-
-  const obj = raw as Record<string, unknown>
-  const merged: Session = {
-    id: (obj.id as string) || '',
-    name: (obj.name as string) || '',
-    parent_id: (obj.parent_id as string | null) ?? null,
-    provider: (obj.provider as Provider) || 'cc',
-    auth: (obj.auth as Auth) || 'subscription',
-    base_url: (obj.base_url as string | null) ?? null,
-    model: (obj.model as string | null) ?? null,
-    key_ref: (obj.key_ref as string | null) ?? null,
-    tag: (obj.tag as string | null) ?? (defaults.tag ?? null),
-    permissions: (obj.permissions as Permissions) || (defaults.permissions ?? 'ask'),
-    effort: (obj.effort as Effort | null) ?? (defaults.effort ?? null),
-    start_prompt: (obj.start_prompt as string | null) ?? (defaults.start_prompt ?? null),
-    goal: (obj.goal as string | null) ?? (defaults.goal ?? null),
-    tmux_session: (obj.tmux_session as string) || '',
-    tmux_window: (obj.tmux_window as string) || '',
-    created_at: (obj.created_at as string) || nowIso(),
-    last_seen_at: (obj.last_seen_at as string) || nowIso(),
-    working_dir: (obj.working_dir as string | null) ?? null,
-    ended_at: (obj.ended_at as string | null) ?? null,
-    rc_url: (obj.rc_url as string | null) ?? null
-  }
-
-  return merged
+export function nowMs(): number {
+  return Date.now()
 }
 
-export function write(session: Session): string {
+function sleepSync(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
+export function withRegistryLock<T>(fn: () => T): T {
+  const dir = registryDir()
+  mkdirSync(dir, { recursive: true })
+  const lockPath = join(dir, '.registry.lock')
+  const staleMs = 5000
+  const deadline = Date.now() + staleMs
+
+  while (true) {
+    try {
+      const fd = openSync(lockPath, 'wx', 0o600)
+      try {
+        writeFileSync(fd, JSON.stringify({ pid: process.pid, created_at: nowIso() }))
+      } finally {
+        closeSync(fd)
+      }
+      break
+    } catch {
+      try {
+        const age = Date.now() - statSync(lockPath).mtimeMs
+        if (age > staleMs) unlinkSync(lockPath)
+      } catch {
+        // lock disappeared between attempts
+      }
+
+      if (Date.now() > deadline) {
+        throw new Error(`Timed out waiting for registry lock: ${lockPath}`)
+      }
+      sleepSync(25)
+    }
+  }
+
+  try {
+    return fn()
+  } finally {
+    try { unlinkSync(lockPath) } catch { /* lock already gone */ }
+  }
+}
+
+export function computeStatus(session: Session): SessionStatus {
+  if (session.ended_at !== null) return 'ended'
+  if (Date.now() - session.last_seen < 30_000) return 'working'
+  return 'idle'
+}
+
+function writeUnlocked(session: Session): string {
   const dir = registryDir()
   mkdirSync(dir, { recursive: true })
 
   const path = join(dir, `${session.id}.json`)
   const tmpPath = `${path}.tmp`
 
-  writeFileSync(tmpPath, JSON.stringify(session, null, 2), 'utf-8')
-
-  try {
-    renameSync(tmpPath, path)
-  } catch {
-    writeFileSync(path, JSON.stringify(session, null, 2), 'utf-8')
-  }
+  writeFileSync(tmpPath, JSON.stringify(redactSession(session), null, 2))
+  chmodSync(tmpPath, 0o600)
+  renameSync(tmpPath, path)
 
   return path
 }
 
-export function read(sessionId: string): Session {
-  const path = join(registryDir(), `${sessionId}.json`)
-  const content = readFileSync(path, 'utf-8')
-  const parsed = JSON.parse(content)
-  return mergeDefaults(parsed)
+export function write(session: Session): string {
+  return withRegistryLock(() => writeUnlocked(session))
+}
+
+// Coerces v3-era sessions to v4 schema so stale disk data doesn't crash the display layer.
+function normalizeSession(raw: Record<string, unknown>): Session {
+  const r = raw as Record<string, unknown>
+  const id = (r['id'] as string) ?? ''
+  const lastSeenRaw = r['last_seen']
+  const lastSeenAtRaw = r['last_seen_at']
+  let last_seen: number
+  if (typeof lastSeenRaw === 'number') {
+    last_seen = lastSeenRaw
+  } else if (typeof lastSeenAtRaw === 'string') {
+    last_seen = new Date(lastSeenAtRaw).getTime()
+  } else {
+    last_seen = 0
+  }
+  return {
+    id,
+    nickname: (r['nickname'] as string) ?? (r['name'] as string) ?? id,
+    provider: ((r['provider'] as string) ?? 'cc') as Session['provider'],
+    model: (r['model'] as string) ?? '',
+    working_dir: (r['working_dir'] as string) ?? '',
+    task: (r['task'] as string) ?? '',
+    task_status: (r['task_status'] as Session['task_status']) ?? 'idle',
+    task_note: (r['task_note'] as string) ?? '',
+    parent_id: (r['parent_id'] as string | null) ?? null,
+    root_id: (r['root_id'] as string) ?? id,
+    depth_level: (r['depth_level'] as number) ?? 0,
+    last_seen,
+    started_at: (r['started_at'] as string) ?? (r['created_at'] as string) ?? new Date(last_seen).toISOString(),
+    ended_at: (r['ended_at'] as string | null) ?? null,
+    tmux_session: (r['tmux_session'] as string) ?? '',
+    rc_enabled: (r['rc_enabled'] as boolean) ?? false,
+    inbox: (r['inbox'] as Session['inbox']) ?? [],
+  }
+}
+
+function readUnlocked(id: string): Session {
+  const path = join(registryDir(), `${id}.json`)
+  const content = readFileSync(path, 'utf8')
+  return normalizeSession(JSON.parse(content) as Record<string, unknown>)
+}
+
+export function read(id: string): Session {
+  return readUnlocked(id)
 }
 
 export function listAll(): Session[] {
   const dir = registryDir()
   let files: string[]
-
   try {
-    files = readdirSync(dir).filter(f => f.endsWith('.json'))
+    files = readdirSync(dir)
   } catch {
     return []
   }
@@ -130,46 +168,57 @@ export function listAll(): Session[] {
   const sessions: Session[] = []
 
   for (const file of files) {
+    if (!file.endsWith('.json')) continue
+
     try {
-      const path = join(dir, file)
-      const content = readFileSync(path, 'utf-8')
-      const parsed = JSON.parse(content)
-      const session = mergeDefaults(parsed)
+      const id = file.slice(0, -5)
+      const session = read(id)
       sessions.push(session)
     } catch {
-      // Skip invalid entries
+      // skip invalid entries
     }
   }
 
-  sessions.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-  return sessions
+  return sessions.sort((a, b) => new Date(b.started_at).getTime() - new Date(a.started_at).getTime())
 }
 
-export function remove(sessionId: string): void {
-  const path = join(registryDir(), `${sessionId}.json`)
-  try {
-    unlinkSync(path)
-  } catch {
-    // File does not exist, no-op
-  }
+export function remove(id: string): void {
+  withRegistryLock(() => {
+    const path = join(registryDir(), `${id}.json`)
+    try {
+      unlinkSync(path)
+    } catch {
+      // no-op if not found
+    }
+  })
 }
 
-export function heartbeat(sessionId: string): void {
-  const session = read(sessionId)
-  session.last_seen_at = nowIso()
-  write(session)
+export function updateSession(id: string, patch: Partial<Session>): void {
+  withRegistryLock(() => {
+    const session = readUnlocked(id)
+    const updated = { ...session, ...patch }
+    writeUnlocked(updated)
+  })
 }
 
-export function isStale(session: Session, thresholdS: number = 300): boolean {
-  const lastSeen = new Date(session.last_seen_at)
-  const now = new Date()
-  const diffMs = now.getTime() - lastSeen.getTime()
-  const diffS = diffMs / 1000
-
-  return diffS > thresholdS
+export function heartbeat(id: string): void {
+  updateSession(id, { last_seen: nowMs() })
 }
 
-export function updateSession(sessionId: string, patch: Partial<Session>): void {
-  const session = read(sessionId)
-  write({ ...session, ...patch })
+export function appendInbox(id: string, message: Message): void {
+  withRegistryLock(() => {
+    const session = readUnlocked(id)
+    session.inbox.push(message)
+    writeUnlocked(session)
+  })
+}
+
+export function readInbox(id: string): Message[] {
+  return withRegistryLock(() => {
+    const session = readUnlocked(id)
+    const messages = session.inbox
+    session.inbox = []
+    writeUnlocked(session)
+    return messages
+  })
 }

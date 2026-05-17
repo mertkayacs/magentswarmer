@@ -1,122 +1,124 @@
 import { describe, it, expect } from 'vitest'
-import { buildCommand, buildEnv } from '../src/launcher/providers.js'
-import type { SpawnConfig } from '../src/state/types.js'
+import { buildCommand, helpCommand, missingHelpFeatures } from '../src/launcher/providers.js'
+import type { BuildCommandOptions } from '../src/launcher/providers.js'
 
 describe('providers', () => {
   describe('buildCommand', () => {
     it('cc with skip permissions includes --dangerously-skip-permissions', () => {
-      const cfg: SpawnConfig = { provider: 'cc', auth: 'subscription', permissions: 'skip' }
-      expect(buildCommand(cfg)).toContain('--dangerously-skip-permissions')
+      const opts: BuildCommandOptions = { provider: 'cc', permissions: 'skip', model: '' }
+      expect(buildCommand(opts)).toContain('--dangerously-skip-permissions')
     })
 
     it('cc with ask permissions does not include skip flag', () => {
-      const cfg: SpawnConfig = { provider: 'cc', auth: 'subscription', permissions: 'ask' }
-      expect(buildCommand(cfg)).not.toContain('--dangerously-skip-permissions')
+      const opts: BuildCommandOptions = { provider: 'cc', permissions: 'ask', model: '' }
+      expect(buildCommand(opts)).not.toContain('--dangerously-skip-permissions')
     })
 
     it('cc with model includes --model flag', () => {
-      const cfg: SpawnConfig = { provider: 'cc', auth: 'subscription', permissions: 'ask', model: 'opus' }
-      const cmd = buildCommand(cfg)
+      const opts: BuildCommandOptions = { provider: 'cc', permissions: 'ask', model: 'opus' }
+      const cmd = buildCommand(opts)
       expect(cmd).toContain('--model')
       expect(cmd).toContain('opus')
     })
 
+    it('cc with api-key auth includes --bare', () => {
+      const opts: BuildCommandOptions = { provider: 'cc', permissions: 'ask', model: '', auth_mode: 'api-key' }
+      expect(buildCommand(opts)).toContain('--bare')
+    })
+
+    it('cc with effort includes --effort', () => {
+      const opts: BuildCommandOptions = { provider: 'cc', permissions: 'ask', model: '', effort: 'high' }
+      const cmd = buildCommand(opts)
+      expect(cmd).toContain('--effort')
+      expect(cmd).toContain('high')
+    })
+
     it('codex with skip permissions includes correct flag', () => {
-      const cfg: SpawnConfig = { provider: 'codex', auth: 'subscription', permissions: 'skip' }
-      expect(buildCommand(cfg)).toContain('--dangerously-bypass-approvals-and-sandbox')
+      const opts: BuildCommandOptions = { provider: 'codex', permissions: 'skip', model: '' }
+      expect(buildCommand(opts)).toContain('--dangerously-bypass-approvals-and-sandbox')
     })
 
     it('codex with ask permissions does not include skip flag', () => {
-      const cfg: SpawnConfig = { provider: 'codex', auth: 'subscription', permissions: 'ask' }
-      expect(buildCommand(cfg)).not.toContain('--dangerously-bypass-approvals-and-sandbox')
+      const opts: BuildCommandOptions = { provider: 'codex', permissions: 'ask', model: '' }
+      expect(buildCommand(opts)).not.toContain('--dangerously-bypass-approvals-and-sandbox')
     })
 
-    it('gemini with skip permissions includes --yolo', () => {
-      const cfg: SpawnConfig = { provider: 'gemini', auth: 'subscription', permissions: 'skip' }
-      expect(buildCommand(cfg)).toContain('--yolo')
+    it('codex with rc_enabled includes --enable remote_control', () => {
+      const opts: BuildCommandOptions = { provider: 'codex', permissions: 'ask', model: '', rc_enabled: true }
+      const cmd = buildCommand(opts)
+      expect(cmd).toContain('--enable')
+      expect(cmd).toContain('remote_control')
     })
 
-    it('gemini with ask permissions does not include --yolo', () => {
-      const cfg: SpawnConfig = { provider: 'gemini', auth: 'subscription', permissions: 'ask' }
-      expect(buildCommand(cfg)).not.toContain('--yolo')
+    it('gemini with skip permissions includes --yolo and --skip-trust', () => {
+      const opts: BuildCommandOptions = { provider: 'gemini', permissions: 'skip', model: '' }
+      const cmd = buildCommand(opts)
+      expect(cmd).toContain('--yolo')
+      expect(cmd).toContain('--skip-trust')
+    })
+
+    it('gemini with ask permissions does not include skip flags', () => {
+      const opts: BuildCommandOptions = { provider: 'gemini', permissions: 'ask', model: '' }
+      const cmd = buildCommand(opts)
+      expect(cmd).not.toContain('--yolo')
+      expect(cmd).not.toContain('--skip-trust')
     })
 
     it('first element is the binary name', () => {
-      expect(buildCommand({ provider: 'cc', auth: 'subscription', permissions: 'ask' })[0]).toBe('claude')
-      expect(buildCommand({ provider: 'codex', auth: 'subscription', permissions: 'ask' })[0]).toBe('codex')
-      expect(buildCommand({ provider: 'gemini', auth: 'subscription', permissions: 'ask' })[0]).toBe('gemini')
+      expect(buildCommand({ provider: 'cc', permissions: 'ask', model: '' })[0]).toBe('claude')
+      expect(buildCommand({ provider: 'codex', permissions: 'ask', model: '' })[0]).toBe('codex')
+      expect(buildCommand({ provider: 'gemini', permissions: 'ask', model: '' })[0]).toBe('gemini')
+      expect(buildCommand({ provider: 'hermes', permissions: 'ask', model: '' })[0]).toBe('hermes')
     })
 
-    // B1 regression: buildCommand must always return an array so tmux execFileSync
-    // receives separate argv entries rather than a shell-interpolated string.
     it('always returns an array for all providers', () => {
-      const providers = ['cc', 'codex', 'gemini'] as const
+      const providers = ['cc', 'codex', 'gemini', 'hermes'] as const
       for (const provider of providers) {
-        const cmd = buildCommand({ provider, auth: 'subscription', permissions: 'ask' })
+        const cmd = buildCommand({ provider, permissions: 'ask', model: '' })
         expect(Array.isArray(cmd)).toBe(true)
         expect(cmd.length).toBeGreaterThan(0)
         expect(typeof cmd[0]).toBe('string')
       }
     })
 
-    it('every element is a string (no nested arrays or objects)', () => {
-      const cmd = buildCommand({ provider: 'cc', auth: 'subscription', permissions: 'skip', model: 'opus' })
+    it('every element is a string', () => {
+      const cmd = buildCommand({ provider: 'cc', permissions: 'skip', model: 'opus' })
       for (const arg of cmd) {
         expect(typeof arg).toBe('string')
       }
     })
-  })
 
-  describe('buildEnv', () => {
-    it('subscription mode removes API key var for cc', () => {
-      const env = { ANTHROPIC_API_KEY: 'sk-test', OTHER: 'val' }
-      const cfg: SpawnConfig = { provider: 'cc', auth: 'subscription', permissions: 'ask' }
-      const result = buildEnv(cfg, env)
-      expect(result.ANTHROPIC_API_KEY).toBeUndefined()
-      expect(result.OTHER).toBe('val')
-    })
-
-    it('api-key mode keeps existing env vars', () => {
-      const env = { ANTHROPIC_API_KEY: 'sk-test' }
-      const cfg: SpawnConfig = { provider: 'cc', auth: 'api-key', permissions: 'ask' }
-      const result = buildEnv(cfg, env)
-      expect(result.ANTHROPIC_API_KEY).toBe('sk-test')
-    })
-
-    it('custom mode sets base_url env var', () => {
-      const env: Record<string, string> = {}
-      const cfg: SpawnConfig = {
-        provider: 'cc',
-        auth: 'custom',
-        permissions: 'ask',
-        base_url: 'https://my.proxy.com',
-        key_ref: 'sk-custom',
-      }
-      const result = buildEnv(cfg, env)
-      expect(result.ANTHROPIC_BASE_URL).toBe('https://my.proxy.com')
-      expect(result.ANTHROPIC_API_KEY).toBe('sk-custom')
-    })
-
-    it('custom mode resolves env: key ref', () => {
-      const env = { MY_CUSTOM_KEY: 'sk-from-env' }
-      const cfg: SpawnConfig = {
-        provider: 'cc',
-        auth: 'custom',
-        permissions: 'ask',
-        key_ref: 'env:MY_CUSTOM_KEY',
-      }
-      const result = buildEnv(cfg, env)
-      expect(result.ANTHROPIC_API_KEY).toBe('sk-from-env')
+    it('rejects unsupported providers', () => {
+      expect(() => buildCommand({ provider: 'unknown' as never, permissions: 'ask', model: '' })).toThrow(/Unsupported provider/)
     })
   })
 
   describe('detectAvailable', () => {
-    it('returns object with cc, codex, gemini keys', async () => {
+    it('returns object with supported provider keys', async () => {
       const { detectAvailable } = await import('../src/launcher/providers.js')
       const result = detectAvailable()
       expect(typeof result.cc).toBe('boolean')
       expect(typeof result.codex).toBe('boolean')
       expect(typeof result.gemini).toBe('boolean')
+      expect(typeof result.hermes).toBe('boolean')
+      expect(Object.keys(result)).toEqual(['cc', 'codex', 'gemini', 'hermes'])
+    })
+  })
+
+  describe('provider compatibility helpers', () => {
+    it('uses hermes chat --help for compatibility inspection', () => {
+      expect(helpCommand('hermes')).toEqual(['hermes', 'chat', '--help'])
+      expect(helpCommand('gemini')).toEqual(['gemini', '--help'])
+    })
+
+    it('detects missing gemini trust bypass support', () => {
+      expect(missingHelpFeatures('gemini', 'Usage: gemini --yolo')).toEqual(['skip permissions'])
+      expect(missingHelpFeatures('gemini', 'Usage: gemini --yolo --skip-trust')).toEqual([])
+    })
+
+    it('detects missing hermes chat support details', () => {
+      expect(missingHelpFeatures('hermes', 'usage: hermes chat --model x')).toEqual(['skip permissions'])
+      expect(missingHelpFeatures('hermes', 'usage: hermes chat --model x --yolo')).toEqual([])
     })
   })
 })

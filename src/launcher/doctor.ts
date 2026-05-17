@@ -8,13 +8,13 @@ import { existsSync, readFileSync } from 'node:fs'
 import { accessSync, constants } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { CheckResult } from '../state/types.js'
-import { detectAvailable } from './providers.js'
-import { listAll as listSessions, remove as removeSession } from '../state/registry.js'
+import { CheckResult, Session } from '../state/types.js'
+import { detectAvailable, inspectProviderCompatibility } from './providers.js'
+import { listAll as listSessions, updateSession, nowIso } from '../state/registry.js'
 
 export interface DoctorResult {
   checks: CheckResult[]
-  orphans: import('../state/types.js').Session[]
+  orphans: Session[]
 }
 
 function checkNodeVersion(): CheckResult {
@@ -25,6 +25,56 @@ function checkNodeVersion(): CheckResult {
     name: 'node',
     status: major >= 20 ? 'ok' : 'fail',
     detail: major >= 20 ? version : `${version} (need >=20.0.0)`,
+  }
+}
+
+function readProcVersion(): string {
+  try {
+    return readFileSync('/proc/version', 'utf-8')
+  } catch {
+    return ''
+  }
+}
+
+type EnvMap = Record<string, string | undefined>
+
+function isWsl(env: EnvMap, procVersion: string): boolean {
+  return Boolean(
+    env.WSL_DISTRO_NAME ||
+    env.WSL_INTEROP ||
+    /microsoft|wsl/i.test(procVersion)
+  )
+}
+
+export function platformSupportCheck(
+  platform = process.platform,
+  env: EnvMap = process.env,
+  procVersion = platform === 'linux' ? readProcVersion() : '',
+): CheckResult {
+  if (platform === 'darwin') {
+    return { name: 'platform', status: 'ok', detail: 'macOS supported' }
+  }
+
+  if (platform === 'linux') {
+    return {
+      name: 'platform',
+      status: 'ok',
+      detail: isWsl(env, procVersion) ? 'WSL supported' : 'Linux supported',
+    }
+  }
+
+  if (platform === 'win32') {
+    return {
+      name: 'platform',
+      status: 'fail',
+      detail: 'native Windows unsupported — use WSL with tmux and provider CLIs installed inside WSL',
+    }
+  }
+
+  return {
+    name: 'platform',
+    status: 'warn',
+    detail: `${platform} is untested — supported targets are macOS, Linux, and WSL`,
   }
 }
 
@@ -59,6 +109,44 @@ function checkProviders(): CheckResult {
     name: 'providers',
     status: noneAvail ? 'fail' : 'ok',
     detail: statuses
+  }
+}
+
+function checkProviderCompatibility(): CheckResult {
+  if (process.env.REEVES_DOCTOR_SKIP_PROVIDER_COMPAT === '1') {
+    return {
+      name: 'provider compat',
+      status: 'warn',
+      detail: 'skipped by REEVES_DOCTOR_SKIP_PROVIDER_COMPAT',
+    }
+  }
+
+  const compatibility = inspectProviderCompatibility()
+  const installed = Object.values(compatibility).filter(p => p.available)
+  if (installed.length === 0) {
+    return {
+      name: 'provider compat',
+      status: 'warn',
+      detail: 'no installed providers to inspect',
+    }
+  }
+
+  const problems = installed
+    .filter(p => !p.ok)
+    .map(p => `${p.provider}: ${p.detail}`)
+
+  if (problems.length === 0) {
+    return {
+      name: 'provider compat',
+      status: 'ok',
+      detail: `${installed.map(p => p.provider).join(', ')} compatible`,
+    }
+  }
+
+  return {
+    name: 'provider compat',
+    status: 'warn',
+    detail: problems.slice(0, 3).join('; ') + (problems.length > 3 ? `; +${problems.length - 3} more` : ''),
   }
 }
 
@@ -127,63 +215,40 @@ function checkTmuxBinding(): CheckResult {
   }
 }
 
-function findOrphans(): { check: CheckResult; orphans: import('../state/types.js').Session[] } {
-  const orphans: import('../state/types.js').Session[] = []
-
+function findOrphans(): { check: CheckResult; orphans: Session[] } {
+  const orphans: Session[] = []
   try {
-    const sessions = listSessions()
-
-    // Get all tmux windows in reevesagents session
-    let tmuxWindows: string[] = []
-    try {
-      const output = execFileSync(
-        'tmux', ['list-windows', '-t', 'reevesagents', '-F', '#{window_name}'],
-        { encoding: 'utf8', stdio: ['pipe', 'pipe', 'ignore'] }
-      )
-      tmuxWindows = output.trim().split('\n').filter(Boolean)
-    } catch {
-      // reevesagents session may not exist yet
-    }
-
-    const windowSet = new Set(tmuxWindows)
-
-    for (const session of sessions) {
-      if (!windowSet.has(session.tmux_window)) {
+    const active = listSessions().filter(s => s.ended_at === null)
+    for (const session of active) {
+      try {
+        execFileSync('tmux', ['has-session', '-t', session.tmux_session], { stdio: 'ignore' })
+      } catch {
         orphans.push(session)
       }
     }
-
-    const detail =
-      orphans.length === 0
-        ? 'none'
-        : `${orphans.length}: ${orphans.map((s) => s.id).join(', ')}`
-
+    const detail = orphans.length === 0
+      ? 'none'
+      : `${orphans.length}: ${orphans.map(s => s.id.slice(0, 8)).join(', ')}`
     return {
-      check: {
-        name: 'orphans',
-        status: orphans.length === 0 ? 'ok' : 'warn',
-        detail
-      },
-      orphans
+      check: { name: 'orphans', status: orphans.length === 0 ? 'ok' : 'warn', detail },
+      orphans,
     }
   } catch (err) {
     return {
-      check: {
-        name: 'orphans',
-        status: 'fail',
-        detail: `error checking: ${err instanceof Error ? err.message : 'unknown'}`
-      },
-      orphans: []
+      check: { name: 'orphans', status: 'fail', detail: `error checking: ${err instanceof Error ? err.message : 'unknown'}` },
+      orphans: [],
     }
   }
 }
 
 export function runDoctor(): DoctorResult {
   const checks: CheckResult[] = [
+    platformSupportCheck(),
     checkNodeVersion(),
     checkTmux(),
     checkTmuxBinding(),
     checkProviders(),
+    checkProviderCompatibility(),
     checkStateDir(),
     checkRegistry()
   ]
@@ -194,8 +259,8 @@ export function runDoctor(): DoctorResult {
   return { checks, orphans }
 }
 
-export function pruneOrphans(orphans: import('../state/types.js').Session[]): void {
+export function pruneOrphans(orphans: Session[]): void {
   for (const session of orphans) {
-    removeSession(session.id)
+    updateSession(session.id, { ended_at: nowIso() })
   }
 }
